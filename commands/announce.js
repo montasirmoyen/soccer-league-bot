@@ -9,7 +9,7 @@ const {
   Events
 } = require('discord.js');
 
-const { CHAIRMAN_ROLE_ID, HOLDER_ROLE_ID } = require('../config/constants');
+const { HOLDER_ROLE_ID } = require('../config/constants');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -20,7 +20,7 @@ module.exports = {
     const member = interaction.member;
     const guild = interaction.guild;
 
-    const requiredRole = guild.roles.cache.get(CHAIRMAN_ROLE_ID) || guild.roles.cache.get(HOLDER_ROLE_ID);
+    const requiredRole = guild.roles.cache.get(HOLDER_ROLE_ID);
     if (!requiredRole) {
       return interaction.reply({ content: '❌ Role restriction is misconfigured. Contact an admin.', ephemeral: true });
     }

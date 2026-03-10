@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { managers } = require('../config/managers');
 const db = require('../db/database'); 
 const cooldowns = new Map();
+import { FREEAGENT_CHANNEL_ID } from '../config/constants';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -102,7 +103,7 @@ module.exports = {
         .setColor(0xffa500)
         .setTimestamp();
 
-      const targetChannel = interaction.client.channels.cache.get('1396552994950222025');
+      const targetChannel = interaction.client.channels.cache.get(FREEAGENT_CHANNEL_ID);
 
       if (!targetChannel) {
         return interaction.reply({

@@ -1,10 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { FRIENDLY_CHANNEL_ID, FRIENDLY_ROLE_ID } = require('../config/constants');
 const managersDB = require('../config/managers.js');
-
-//const MANAGER_ROLE_ID = '1406827377916641310';
-//const ASSISTANT_ROLE_ID = '1406827377916641310';
-const FRIENDLY_ROLE_ID = '1396443727580627086';
-const FRIENDLY_CHANNEL_ID = '1396559656121405590';
 
 const regions = ['GMT', 'BST', 'EST', 'CST', 'PST', 'OTHER'];
 const types = ['DM TO PLAY', 'IN GAME ALREADY'];
@@ -68,19 +64,14 @@ module.exports = {
     const member = interaction.guild.members.cache.get(userId);
     const displayName = member ? member.displayName : user.username;
 
-    //let pingString;
-    //if (isManager) {
-      //pingString = `<@${userId}> <@&${MANAGER_ROLE_ID}> <@&${ASSISTANT_ROLE_ID}> <@&${FRIENDLY_ROLE_ID}>`;
-    //} else {
-      let pingString = `<@${userId}> <@&${FRIENDLY_ROLE_ID}>`;
-   // }
+    let pingString = `<@${userId}> <@&${FRIENDLY_ROLE_ID}>`;
 
     const embed = new EmbedBuilder()
       .setColor(0x5865F2)
       .setTimestamp()
       .setFooter({
           text: '[PSL] Pure Soccer League - ' + new Date().toLocaleString(),
-          iconURL: 'https://media.discordapp.net/attachments/1396248400122613861/1415814787044081805/PSL_LOGO_WHITE.png?ex=68c493c5&is=68c34245&hm=bdc17b94895be0ce7e1591c3d284af2ae772dbc9e692fac34e1114b8be73ea52&=&format=webp&quality=lossless&width=1440&height=1440'
+          iconURL: 'https://media.discordapp.net/attachments/1480765412651307200/1480765442946629632/PSL_LOGO_WHITE.png?ex=69b0ddc8&is=69af8c48&hm=cc39c00742d3a79f6951870d01481a4d125e94e3dd4abeb3069c6c0ef11a3005&=&format=webp&quality=lossless&width=700&height=700'
         })
       .setAuthor({ name: displayName, iconURL: user.displayAvatarURL({ extension: 'png', size: 128 }) });
 

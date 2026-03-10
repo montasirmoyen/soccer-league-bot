@@ -2,7 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { managers } = require('../config/managers');
 const db = require('../db/database'); 
 const cooldowns = new Map();
-import { FREEAGENT_CHANNEL_ID } from '../config/constants';
+const { FREEAGENT_CHANNEL_ID } = require('../config/constants');
 
 module.exports = {
   data: new SlashCommandBuilder()

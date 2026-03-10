@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { managers } = require('../config/managers');
 const db = require('../db/database');
+const { RELEASE_CHANNEL_ID } = require('../config/constants');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -37,7 +38,7 @@ module.exports = {
 
       await db.releasePlayer(releasee.id);
 
-      const releaseChannel = await interaction.client.channels.fetch('1406848569486606486');
+      const releaseChannel = await interaction.client.channels.fetch(RELEASE_CHANNEL_ID);
       releaseChannel.send(`⚡ | **<@${releasee.id}>** has been **FORCE RELEASED** from **${row.teamName}** by <@${sender}>`);
 
       await interaction.reply({ content: `✅ <@${releasee.id}> force released from **${row.teamName}**`, ephemeral: true });

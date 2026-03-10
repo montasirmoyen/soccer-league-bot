@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { managers } = require('../config/managers');
+const { RELEASE_CHANNEL_ID } = require('../config/constants');
 const db = require('../db/database');
 
 module.exports = {
@@ -43,7 +44,7 @@ module.exports = {
 
       await db.releasePlayer(releasee.id);
 
-      const releaseChannel = await interaction.client.channels.fetch('1406848569486606486');
+      const releaseChannel = await interaction.client.channels.fetch(RELEASE_CHANNEL_ID);
       await releaseChannel.send(`🔔 | **<@${releasee.id}>** has been released from **${contract.teamName}**`);
 
       await interaction.reply({ content: `✅ <@${releasee.id}> released from **${contract.teamName}**`, ephemeral: true });

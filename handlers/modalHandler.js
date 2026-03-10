@@ -1,12 +1,12 @@
 const { EmbedBuilder } = require('discord.js');
-const { ANNOUNCE_CHANNEL_ID, MINIMUM_ROLE_ID } = require('../config/constants');
+const { ANNOUNCE_CHANNEL_ID, CHAIRMAN_ROLE_ID } = require('../config/constants');
 
 async function handleAnnounceModal(interaction, emojiMap) {
   const member = interaction.member;
   const guild = interaction.guild;
 
-  const requiredRole = guild.roles.cache.get(MINIMUM_ROLE_ID);
-  if (!requiredRole || member.roles.highest.comparePositionTo(requiredRole) < 0) {
+  const requiredRole = guild.roles.cache.get(CHAIRMAN_ROLE_ID);
+  if (!requiredRole || !member.roles.cache.has(CHAIRMAN_ROLE_ID)) {
     return interaction.reply({ content: '🚫 You do not have permission.', ephemeral: true });
   }
 

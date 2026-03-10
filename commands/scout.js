@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { managers } = require('../config/managers');
+const { SCOUT_CHANNEL_ID } = require('../config/constants');
 
 const cooldowns = new Map();
 
@@ -89,7 +90,7 @@ module.exports = {
       .setColor(0x00ff00)
       .setTimestamp();
 
-    const targetChannel = interaction.client.channels.cache.get('1396552846303953106');
+    const targetChannel = interaction.client.channels.cache.get(SCOUT_CHANNEL_ID);
     if (targetChannel) {
       await targetChannel.send({ embeds: [embed] });
       await interaction.reply({ content: '✅ Your scouting message has been posted!', ephemeral: true });

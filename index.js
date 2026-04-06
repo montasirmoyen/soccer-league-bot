@@ -5,13 +5,15 @@ const { connectMongo } = require('./db/connect');
 const { loadCommands } = require('./bot/loadCommands');
 const { registerCommands } = require('./bot/registerCommands');
 const { registerInteractionHandler } = require('./handlers/interactionHandler');
+const { registerVerifierHandler } = require('./handlers/verifierHandler');
 const { startHealthServer } = require('./web/healthServer');
 
 const emojiMap = {};
 
 async function bootstrap() {
-  const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
   client.commands = new Collection();
+  const botToken = process.env.TOKEN || process.env.DISCORD_TOKEN;
 
   startHealthServer();
 
@@ -36,8 +38,9 @@ async function bootstrap() {
   });
 
   registerInteractionHandler(client, emojiMap);
+  registerVerifierHandler(client);
 
-  await client.login(process.env.TOKEN);
+  await client.login(botToken);
 }
 
 bootstrap().catch((err) => {

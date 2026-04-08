@@ -2,11 +2,11 @@ const { Events } = require('discord.js');
 const noblox = require('noblox.js');
 const axios = require('axios');
 
-const GROUP_ID = 151319009;
-const ROLE_ID_VERIFIED = 1480572500315209870;
-const RANK_ID_VERIFIED = 3;
-const ROLE_ID_UNVERIFIED = 1480574659459022890;
-const RANK_ID_UNVERIFIED = 2;
+const DEFAULT_GROUP_ID = 151319009;
+const DEFAULT_ROLE_ID_VERIFIED = '1480572500315209870';
+const DEFAULT_RANK_ID_VERIFIED = 3;
+const DEFAULT_ROLE_ID_UNVERIFIED = '1480574659459022890';
+const DEFAULT_RANK_ID_UNVERIFIED = 2;
 
 let robloxInitialized = false;
 
@@ -20,15 +20,24 @@ function parseIntEnv(name) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+function parseRoleIdEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) {
+    return fallback;
+  }
+
+  return String(raw).trim();
+}
+
 function getVerifierConfig() {
   return {
     robloxCookie: process.env.ROBLOX_COOKIE,
     roverApiKey: process.env.ROVER_API_KEY,
-    groupId: GROUP_ID,
-    roleIdVerified: ROLE_ID_VERIFIED,
-    roleIdUnverified: ROLE_ID_UNVERIFIED,
-    rankIdVerified: RANK_ID_VERIFIED,
-    rankIdUnverified: RANK_ID_UNVERIFIED,
+    groupId: parseIntEnv('GROUP_ID') || DEFAULT_GROUP_ID,
+    roleIdVerified: parseRoleIdEnv('ROLE_ID_VERIFIED', DEFAULT_ROLE_ID_VERIFIED),
+    roleIdUnverified: parseRoleIdEnv('ROLE_ID_UNVERIFIED', DEFAULT_ROLE_ID_UNVERIFIED),
+    rankIdVerified: parseIntEnv('RANK_ID_VERIFIED') || DEFAULT_RANK_ID_VERIFIED,
+    rankIdUnverified: parseIntEnv('RANK_ID_UNVERIFIED') || DEFAULT_RANK_ID_UNVERIFIED,
   };
 }
 

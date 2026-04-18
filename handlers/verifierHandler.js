@@ -28,7 +28,7 @@ process.on('SIGINT', handleShutdown);
 process.on('SIGTERM', handleShutdown);
 
 async function withRetry(fn, maxRetries = 3, delayMs = 5000) {
-  for (let i = 0; i < maxRetries; i++) {
+  for (let retries = 0; retries < maxRetries; retries++) {
     try {
       return await fn();
     } catch (error) {
@@ -36,7 +36,7 @@ async function withRetry(fn, maxRetries = 3, delayMs = 5000) {
       if (status >= 400 && status < 500 && status !== 429) {
         throw error;
       }
-      if (i === maxRetries - 1) throw error;
+      if (retries === maxRetries - 1) throw error;
       await new Promise(res => setTimeout(res, delayMs));
     }
   }
@@ -45,7 +45,7 @@ async function withRetry(fn, maxRetries = 3, delayMs = 5000) {
 async function sendLog(client, embed) {
   try {
     const channel = await client.channels.fetch(LOG_CHANNEL_ID);
-    if (channel?.isTextBased()) await channel.send({ embeds: [embed] }).catch(() => {});
+    if (channel?.isTextBased()) await channel.send({ embeds: [embed] }).catch(() => { });
   } catch (err) {
     console.error('[LOG ERROR] Fail sending log to channel:', err.message);
   }
@@ -75,6 +75,7 @@ async function fetchRobloxUserId(guildId, memberId, roverApiKey) {
 
 async function processQueue(client) {
   if (isProcessing || promotionQueue.length === 0) return;
+
   isProcessing = true;
 
   while (promotionQueue.length > 0) {
@@ -82,57 +83,76 @@ async function processQueue(client) {
 
     try {
       const robloxId = await withRetry(() => fetchRobloxUserId(newMember.guild.id, newMember.id, config.roverApiKey));
-      
+
       if (robloxId) {
         const currentRankNumber = await withRetry(() => noblox.getRankInGroup(config.groupId, robloxId));
 
         if (currentRankNumber !== 0 && currentRankNumber !== targetRank) {
           const robloxUsername = await withRetry(() => noblox.getUsernameFromId(robloxId));
           const groupRoles = await getGroupRoles(config.groupId);
-          
+
           const targetRoleName = groupRoles.find(r => r.rank === targetRank)?.name || 'Unknown';
           const currentRoleName = groupRoles.find(r => r.rank === currentRankNumber)?.name || 'Unknown';
 
           await withRetry(() => noblox.setRank(config.groupId, robloxId, targetRank));
-          
+
           const successEmbed = new EmbedBuilder()
             .setColor('#2ECC71')
-            .setTitle('✅ Rank Updated Successfully')
-            .setAuthor({ name: 'Verification System', iconURL: client.user.displayAvatarURL() })
-            .setThumbnail(`https://www.roblox.com/headshot-thumbnail/image?userId=${robloxId}&width=420&height=420&format=png`)
+            .setAuthor({
+              name: 'System Promotion Management',
+              iconURL: client.user.displayAvatarURL()
+            })
+            .setTitle('✅ Successfully Promoted')
+            .setThumbnail(client.user.displayAvatarURL())
             .addFields(
-              { name: '👤 Discord User', value: `${newMember.user.tag}`, inline: true },
-              { name: '🎮 Roblox Name', value: `[${robloxUsername}](https://www.roblox.com/users/${robloxId}/profile)`, inline: true },
+              { name: '👤 Discord User', value: `**${message.author.username}**`, inline: true },
+              { name: '🆔 Discord ID', value: `\`${message.author.id}\``, inline: true },
+              { name: '\u200B', value: '\u200B', inline: true },
+              { name: '🎮 Roblox Name', value: `[${robloxUsername}](https://roblox.com{robloxId}/profile)`, inline: true },
               { name: '🆔 Roblox ID', value: `\`${robloxId}\``, inline: true },
-              { name: '🔑 New Rank', value: `**${targetRoleName} (${targetRank})**`, inline: false }
+              { name: '\u200B', value: '\u200B', inline: true },
+              { name: '🔑 Rank Update', value: `\`${currentRoleName} (${currentRankNumber})\` ➔ **${targetRoleName} (${targetRank})**`, inline: false }
             )
-            .setFooter({ text: `Previous Rank: ${currentRoleName} (${currentRankNumber})` })
+            .setFooter({
+              text: 'Promoted by PSL Verification System',
+              iconURL: client.user.displayAvatarURL()
+            })
             .setTimestamp();
-            
+
           await sendLog(client, successEmbed);
         }
       }
     } catch (err) {
       const errorEmbed = new EmbedBuilder()
-        .setColor('#E74C3C')
-        .setTitle('❌ Critical Sync Error')
-        .setAuthor({ name: 'Verification System', iconURL: client.user.displayAvatarURL() })
-        .setDescription(`Failed to process rank update for **${newMember.user.tag}**.`)
-        .addFields(
-          { name: 'Error Message', value: `\`${err.message}\`` },
-          { name: 'Status Code', value: `\`${err.response?.status || err.statusCode || 'N/A'}\`` }
-        )
+        .setColor('#FF4B4B')
+        .setAuthor({
+          name: 'System Promotion Management',
+          iconURL: client.user.displayAvatarURL()
+        })
+        .setTitle('❌ Critical Sync Failure')
         .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
+        .addFields(
+          { name: '👤 Affected User', value: `${newMember.user}`, inline: true },
+          { name: '🆔 Discord ID', value: `\`${newMember.id}\``, inline: true },
+          { name: '\u200B', value: '\u200B', inline: true },
+          { name: '⚠️ Error Details', value: `\`\`\`x86asm\n${err.message}\n\`\`\``, inline: false },
+          { name: '📊 Status Code', value: `\`${err.response?.status || err.statusCode || '500'}\``, inline: true },
+          { name: '🛠️ Action', value: '`Auto-Retry Initiated`', inline: true }
+        )
+        .setFooter({
+          text: 'Attempted by PSL Verification System',
+          iconURL: client.user.displayAvatarURL()
+        })
         .setTimestamp();
-        
+
       await sendLog(client, errorEmbed);
     }
-    
+
     await new Promise(res => setTimeout(res, 10000));
   }
-  
+
   isProcessing = false;
-  if (promotionQueue.length > 0) processQueue(client);
+  processQueue(client);
 }
 
 function parseIntEnv(name) {
@@ -156,7 +176,7 @@ function getVerifierConfig() {
 
 function registerVerifierHandler(client) {
   const config = getVerifierConfig();
-  
+
   if (!config.robloxCookie || !config.roverApiKey || !config.groupId) {
     console.warn('[SYSTEM WARN] Missing API keys or Group ID. Verification disabled.');
     return;

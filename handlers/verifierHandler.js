@@ -97,7 +97,7 @@ async function processQueue(client) {
           await withRetry(() => noblox.setRank(config.groupId, robloxId, targetRank));
 
           const successEmbed = new EmbedBuilder()
-            .setColor('#2ECC71')
+            .setColor('#7CB559')
             .setAuthor({
               name: 'System Promotion Management',
               iconURL: client.user.displayAvatarURL()
@@ -124,7 +124,7 @@ async function processQueue(client) {
       }
     } catch (err) {
       const errorEmbed = new EmbedBuilder()
-        .setColor('#FF4B4B')
+        .setColor('#DE3449')
         .setAuthor({
           name: 'System Promotion Management',
           iconURL: client.user.displayAvatarURL()

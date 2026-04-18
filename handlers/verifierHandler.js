@@ -85,27 +85,50 @@ async function processQueue(client) {
       const robloxId = await withRetry(() => fetchRobloxUserId(newMember.guild.id, newMember.id, config.roverApiKey));
 
       if (!robloxId) {
-        console.log(`[WARN] No robloxId found for ${newMember.user.tag}`);
-        
-        const warnEmbed = new EmbedBuilder()
-          .setTitle('⚠️ Sync Warning')
-          .setDescription(`No robloxId found for **${newMember.user.tag}**`)
-          .setColor('#FFA500')
-          .setTimestamp();
-        await sendLog(client, warnEmbed);
-      } else {
-        await withRetry(() => noblox.setRank(config.groupId, Number.parseInt(String(robloxId), 10), targetRank));
-        console.log(`[SUCCESS] Ranked ${newMember.user.tag} (RBX: ${robloxId}) to Rank ${targetRank}`);
-
-        const successEmbed = new EmbedBuilder()
-          .setTitle('✅ Rank Updated')
+        console.warn(`[VERIFIER WARN] No Roblox account linked via Rover for Discord user ${newMember.user.tag} (${newMember.id}) in guild ${newMember.guild.name} (${newMember.guild.id}). Skipping promotion.`);
+        const missingRobloxEmbed = new EmbedBuilder()
+          .setColor('#F0B232')
+          .setTitle('Promotion Skipped: No Roblox Account Linked')
+          .setDescription(`Could not find a Roblox account linked via Rover for ${newMember.user}.`)
           .addFields(
-            { name: 'User', value: `${newMember.user.tag}`, inline: true },
-            { name: 'Roblox ID', value: `${robloxId}`, inline: true },
-            { name: 'New Rank', value: `${targetRank}`, inline: true }
+            { name: 'Discord User', value: `${newMember.user.tag} (${newMember.id})`, inline: false },
+            { name: 'Guild', value: `${newMember.guild.name} (${newMember.guild.id})`, inline: false },
+            { name: 'Target Rank', value: `${targetRank}`, inline: true }
           )
-          .setColor('#00FF00')
           .setTimestamp();
+        await sendLog(client, missingRobloxEmbed);
+        continue;
+      }
+      const currentRankNumber = await withRetry(() => noblox.getRankInGroup(config.groupId, robloxId));
+      if (currentRankNumber !== 0 && currentRankNumber !== targetRank) {
+        const robloxUsername = await withRetry(() => noblox.getUsernameFromId(robloxId));
+        const groupRoles = await getGroupRoles(config.groupId);
+        const targetRoleName = groupRoles.find(r => r.rank === targetRank)?.name || 'Unknown';
+        const currentRoleName = groupRoles.find(r => r.rank === currentRankNumber)?.name || 'Unknown';
+        await withRetry(() => noblox.setRank(config.groupId, robloxId, targetRank));
+        const successEmbed = new EmbedBuilder()
+          .setColor('#7CB559')
+          .setAuthor({
+            name: 'System Promotion Management',
+            iconURL: client.user.displayAvatarURL()
+          })
+          .setTitle('✅ Successfully Promoted')
+          .setThumbnail(client.user.displayAvatarURL())
+          .addFields(
+            { name: '👤 Discord User', value: `**${newMember.user.username}**`, inline: true },
+            { name: '🆔 Discord ID', value: `\`${newMember.id}\``, inline: true },
+            { name: '\u200B', value: '\u200B', inline: true },
+            { name: '🎮 Roblox Name', value: `[${robloxUsername}](https://www.roblox.com/users/${robloxId}/profile)`, inline: true },
+            { name: '🆔 Roblox ID', value: `\`${robloxId}\``, inline: true },
+            { name: '\u200B', value: '\u200B', inline: true },
+            { name: '🔑 Rank Update', value: `\`${currentRoleName} (${currentRankNumber})\` ➔ **${targetRoleName} (${targetRank})**`, inline: false }
+          )
+          .setFooter({
+            text: 'Promoted by PSL Verification System',
+            iconURL: client.user.displayAvatarURL()
+          })
+          .setTimestamp();
+
         await sendLog(client, successEmbed);
       }
     } catch (err) {
@@ -118,9 +141,12 @@ async function processQueue(client) {
         .setTitle('❌ Critical Sync Failure')
         .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
         .addFields(
-          { name: 'User', value: `${newMember.user.tag}` },
-          { name: 'Code', value: `${errorCode}` },
-          { name: 'Message', value: `${errorMessage}` }
+          { name: '👤 Affected User', value: `${newMember.user}`, inline: true },
+          { name: '🆔 Discord ID', value: `\`${newMember.id}\``, inline: true },
+          { name: '\u200B', value: '\u200B', inline: true },
+          { name: '⚠️ Error Details', value: `\`\`\`x86asm\n${err.message}\n\`\`\``, inline: false },
+          { name: '📊 Status Code', value: `\`${err.response?.status || err.statusCode || '500'}\``, inline: true },
+          { name: '🛠️ Action', value: '`Retries Exhausted`', inline: true }
         )
         .setFooter({
           text: 'Attempted by PSL Verification System',

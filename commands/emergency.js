@@ -44,21 +44,26 @@ module.exports = {
       const teamData = managers[sender];
 
       const embed = new EmbedBuilder()
-        .setTitle('🚨 PSL Emergency Contract')
-        .setDescription(
-          `**EMERGENCY SIGNING**\n` +
-          `By accepting this emergency contract, <@${player.id}>, you agree to join the team immediately.\n\n` +
-          `${existingContract ? `⚠️ **Current Team**: *${existingContract.teamName}**\n` : ''}` +
-          `🆕 **New Team**: **${teamData.team}**\n\n` +
-          `📋 **Emergency Reason**\n\`${reason}\`\n\n` +
-          `🖊️ **Authorized By**\n<@${sender}>\n\n` +
-          `⚠️ **Note**: This is an emergency signing that may override existing contracts.`
+        .setAuthor({
+          name: interaction.user.displayName || interaction.user.username,
+          iconURL: interaction.user.displayAvatarURL()
+        })
+        .setTitle('🚨 Emergency Signing')
+        .setColor(0xED4245)
+        .setDescription(`<@${player.id}>, you have received an **emergency contract**. This requires your immediate response.`)
+        .addFields(
+          ...(existingContract ? [{ name: '⚠️ Current Team', value: existingContract.teamName, inline: true }] : []),
+          { name: '🆕 New Team', value: teamData.team, inline: true },
+          { name: '🖊️ Authorized By', value: `<@${sender}>`, inline: true },
+          { name: '​', value: '​', inline: true },
+          { name: '📋 Reason', value: `\`${reason}\``, inline: false },
+          { name: '⚠️ Note', value: 'This emergency signing may override your existing contract.', inline: false }
         )
         .setFooter({
-          text: '[PSL] Pure Soccer League - ' + new Date().toLocaleString(),
+          text: 'PSL · Pure Soccer League',
           iconURL: 'https://media.discordapp.net/attachments/1480765412651307200/1480765442946629632/PSL_LOGO_WHITE.png?ex=69b0ddc8&is=69af8c48&hm=cc39c00742d3a79f6951870d01481a4d125e94e3dd4abeb3069c6c0ef11a3005&=&format=webp&quality=lossless&width=700&height=700'
         })
-        .setColor(0xff6b6b); 
+        .setTimestamp();
 
       const buttons = new ActionRowBuilder().addComponents(
         new ButtonBuilder()

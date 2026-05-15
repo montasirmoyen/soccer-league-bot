@@ -88,19 +88,24 @@ module.exports = {
       setTimeout(() => cooldowns.delete(userId), cooldownAmount);
 
       const embed = new EmbedBuilder()
-        .setTitle('🏃‍♂️ Free Agent Registration')
-        .setDescription(
-          `<@${userId}> has registered as a free agent!\n\n` +
-          `📍 **Position**: ${position}\n` +
-          `🌍 **Region**: ${region}\n\n` +
-          `Managers can send contracts to this player using \`/contract\``
-        )
+        .setAuthor({
+          name: user.displayName || user.username,
+          iconURL: user.displayAvatarURL()
+        })
+        .setTitle('🏃 Free Agent Registration')
         .setThumbnail(user.displayAvatarURL())
+        .setColor(0xFEE75C)
+        .setDescription(`<@${userId}> is looking for a team!`)
+        .addFields(
+          { name: '📍 Position', value: position, inline: true },
+          { name: '🌍 Region', value: region, inline: true },
+          { name: '​', value: '​', inline: true },
+          { name: '📋 Info', value: 'Managers can send a contract using `/contract`', inline: false }
+        )
         .setFooter({
-          text: '[PSL] Pure Soccer League - ' + new Date().toLocaleString(),
+          text: 'PSL · Pure Soccer League',
           iconURL: 'https://media.discordapp.net/attachments/1480765412651307200/1480765442946629632/PSL_LOGO_WHITE.png?ex=69b0ddc8&is=69af8c48&hm=cc39c00742d3a79f6951870d01481a4d125e94e3dd4abeb3069c6c0ef11a3005&=&format=webp&quality=lossless&width=700&height=700'
         })
-        .setColor(0xffa500)
         .setTimestamp();
 
       const targetChannel = interaction.client.channels.cache.get(FREEAGENT_CHANNEL_ID);

@@ -66,41 +66,35 @@ module.exports = {
 
     let pingString = `<@${userId}> <@&${FRIENDLY_ROLE_ID}>`;
 
+    const statusValue = type === 'IN GAME ALREADY' ? '🟢 In Game' : '📨 DM to Play';
+    const infoValue = type === 'DM TO PLAY'
+      ? `DM <@${userId}> to set up a game!`
+      : 'Team is already in a server — join up!';
+
     const embed = new EmbedBuilder()
+      .setAuthor({ name: displayName, iconURL: user.displayAvatarURL({ extension: 'png', size: 128 }) })
       .setColor(0x5865F2)
       .setTimestamp()
       .setFooter({
-          text: '[PSL] Pure Soccer League - ' + new Date().toLocaleString(),
-          iconURL: 'https://media.discordapp.net/attachments/1480765412651307200/1480765442946629632/PSL_LOGO_WHITE.png?ex=69b0ddc8&is=69af8c48&hm=cc39c00742d3a79f6951870d01481a4d125e94e3dd4abeb3069c6c0ef11a3005&=&format=webp&quality=lossless&width=700&height=700'
-        })
-      .setAuthor({ name: displayName, iconURL: user.displayAvatarURL({ extension: 'png', size: 128 }) });
+        text: 'PSL · Pure Soccer League',
+        iconURL: 'https://media.discordapp.net/attachments/1480765412651307200/1480765442946629632/PSL_LOGO_WHITE.png?ex=69b0ddc8&is=69af8c48&hm=cc39c00742d3a79f6951870d01481a4d125e94e3dd4abeb3069c6c0ef11a3005&=&format=webp&quality=lossless&width=700&height=700'
+      });
 
     if (isManager) {
-      embed.setTitle(`**${managerData.team}** is Looking for a Match!`)
+      embed.setTitle(`⚽ ${managerData.team} — Looking for a Match!`)
         .addFields(
-          { name: 'Region', value: region, inline: true },
-          { name: 'Status', value: type === 'IN GAME ALREADY' ? 'In Game' : 'DM to Play', inline: true },
-
-          { 
-            name: 'Info', 
-            value: type === 'DM TO PLAY' 
-              ? `DM <@${userId}> if you want to friendly!` 
-              : 'Team is in a server waiting to friendly!', 
-            inline: false 
-          }
+          { name: '🌍 Region', value: region, inline: true },
+          { name: '📶 Status', value: statusValue, inline: true },
+          { name: '​', value: '​', inline: true },
+          { name: '📋 Info', value: infoValue, inline: false }
         );
     } else {
-      embed.setTitle(`${displayName} is Looking for a Friendly!`)
+      embed.setTitle(`⚽ ${displayName} — Looking for a Friendly!`)
         .addFields(
-          { name: 'Region', value: region, inline: true },
-          { name: 'Status', value: type === 'IN GAME ALREADY' ? 'In Game' : 'DM to Play', inline: true },
-          { 
-            name: 'Info', 
-            value: type === 'DM TO PLAY' 
-              ? `DM <@${userId}> if you want to friendly!` 
-              : 'Team is in a server waiting to friendly!', 
-            inline: false 
-          }
+          { name: '🌍 Region', value: region, inline: true },
+          { name: '📶 Status', value: statusValue, inline: true },
+          { name: '​', value: '​', inline: true },
+          { name: '📋 Info', value: infoValue, inline: false }
         );
     }
 

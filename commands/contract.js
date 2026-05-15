@@ -50,19 +50,24 @@ module.exports = {
       const teamData = managers[sender];
 
       const embed = new EmbedBuilder()
+        .setAuthor({
+          name: interaction.user.displayName || interaction.user.username,
+          iconURL: interaction.user.displayAvatarURL()
+        })
         .setTitle('📑 PSL Contract')
-        .setDescription(
-          `By accepting this contract, you agree to the terms established by the manager\n` +
-          `and acknowledge the team assigned to you, <@${signee.id}>\n\n` +
-          `⚠️ **Note**: You cannot join another team until you are released.\n\n` +
-          `🧾 **Team**\n**${teamData.team}**\n\n` +
-          `🖊️ **Signed By**\n<@${sender}>\n\n`
+        .setColor(0x5865F2)
+        .setDescription(`<@${signee.id}>, you have received a contract offer. Review the details below and accept or decline.`)
+        .addFields(
+          { name: '🏆 Team', value: teamData.team, inline: true },
+          { name: '🖊️ Signed By', value: `<@${sender}>`, inline: true },
+          { name: '​', value: '​', inline: true },
+          { name: '⚠️ Note', value: 'Once accepted, you cannot join another team until released.', inline: false }
         )
         .setFooter({
-          text: '[PSL] Pure Soccer League - ' + new Date().toLocaleString(),
+          text: 'PSL · Pure Soccer League',
           iconURL: 'https://media.discordapp.net/attachments/1480765412651307200/1480765442946629632/PSL_LOGO_WHITE.png?ex=69b0ddc8&is=69af8c48&hm=cc39c00742d3a79f6951870d01481a4d125e94e3dd4abeb3069c6c0ef11a3005&=&format=webp&quality=lossless&width=700&height=700'
         })
-        .setColor(0x2f3136);
+        .setTimestamp();
 
       const buttons = new ActionRowBuilder().addComponents(
         new ButtonBuilder()

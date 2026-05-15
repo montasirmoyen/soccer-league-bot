@@ -76,29 +76,33 @@ module.exports = {
 		const pingString = `<@${userId}> <@&${SCRIM_PING_ROLE_ID}>`;
 
 		const embed = new EmbedBuilder()
-			.setColor(0x3af3e3)
-			.setTimestamp()
-			.setFooter({
-				text: 'PSL Scrim',
-				iconURL:
-					'https://cdn.discordapp.com/attachments/1455665134902051051/1455665224966209617/PS_LOGO_WHITE.webp?ex=69558d62&is=69543be2&hm=a4211aece09f511a0ee5a976a108664ad0ccb471073d2de517c47c6bd841659b&',
-			})
 			.setAuthor({
 				name: displayName,
 				iconURL: user.displayAvatarURL({ extension: 'png', size: 128 }),
 			})
-			.setTitle(`**${displayName}** is hosting a scrim!`)
+			.setTitle('\ud83c\udfae Scrim Hosted')
+			.setColor(0x3af3e3)
 			.addFields(
-				{ name: 'Server Name', value: serverName, inline: true },
-				{ name: 'Server Region', value: serverRegion, inline: true },
-				...(serverCode ? [{ name: 'Code', value: serverCode, inline: true }] : [])
+				{ name: '\ud83d\udda5\ufe0f Server Name', value: serverName, inline: true },
+				{ name: '\ud83c\udf0d Region', value: serverRegion, inline: true },
+				...(serverCode ? [{ name: '\ud83d\udd11 Code', value: serverCode, inline: true }] : [{ name: '\u200b', value: '\u200b', inline: true }]),
+				{
+					name: '\ud83d\udd17 Join',
+					value: '[Click here to join Pure Soccer!](https://www.roblox.com/games/88920112778598/Pure-Soccer)',
+					inline: false,
+				},
+				{
+					name: '\ud83d\udd15 Opt Out',
+					value: 'To stop receiving pings, remove your role [here](https://discord.com/channels/1384782138725105715/1391925457074524222).',
+					inline: false,
+				}
 			)
-			.addFields({
-				name: '\u200b',
-				value:
-					'[Click here to join!](https://www.roblox.com/games/88920112778598/Pure-Soccer)\nTo stop receiving pings, remove your react here: https://discord.com/channels/1384782138725105715/1391925457074524222',
-				inline: false,
-			});
+			.setFooter({
+				text: 'PSL \u00b7 Pure Soccer League',
+				iconURL:
+					'https://cdn.discordapp.com/attachments/1455665134902051051/1455665224966209617/PS_LOGO_WHITE.webp?ex=69558d62&is=69543be2&hm=a4211aece09f511a0ee5a976a108664ad0ccb471073d2de517c47c6bd841659b&',
+			})
+			.setTimestamp();
 
 		if (sinfoImage) {
 			embed.setImage(sinfoImage.url);

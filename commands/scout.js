@@ -72,22 +72,23 @@ module.exports = {
     }, cooldownAmount);
 
     const embed = new EmbedBuilder()
-      .setTitle('🔍 Player Scout')
-      .setDescription(
-        `**${teamData.team}** is scouting for players!\n\n` +
-        `📌 **Position**: ${position}\n\n` +
-        `💬 **Message**:\n${message}\n\n` +
-        `*If you're interested and available, feel free to DM <@${user}>!*`
-      )
       .setAuthor({
         name: interaction.user.displayName,
         iconURL: interaction.user.displayAvatarURL()
       })
+      .setTitle('🔍 Player Scout')
+      .setColor(0x57F287)
+      .addFields(
+        { name: '🏆 Team', value: teamData.team, inline: true },
+        { name: '📌 Position', value: position, inline: true },
+        { name: '​', value: '​', inline: true },
+        { name: '💬 Message', value: message, inline: false },
+        { name: '📩 Contact', value: `DM <@${user}> if you're interested!`, inline: false }
+      )
       .setFooter({
-        text: '[PSL] Pure Soccer League - ' + new Date().toLocaleString(),
+        text: 'PSL · Pure Soccer League',
         iconURL: 'https://media.discordapp.net/attachments/1480765412651307200/1480765442946629632/PSL_LOGO_WHITE.png?ex=69b0ddc8&is=69af8c48&hm=cc39c00742d3a79f6951870d01481a4d125e94e3dd4abeb3069c6c0ef11a3005&=&format=webp&quality=lossless&width=700&height=700'
       })
-      .setColor(0x00ff00)
       .setTimestamp();
 
     const targetChannel = interaction.client.channels.cache.get(SCOUT_CHANNEL_ID);

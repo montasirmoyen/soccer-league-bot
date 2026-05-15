@@ -10,78 +10,74 @@ module.exports = {
     const user = interaction.user.id;
     const isManager = managers[user] ? true : false;
 
+    const PSL_LOGO = 'https://media.discordapp.net/attachments/1480765412651307200/1480765442946629632/PSL_LOGO_WHITE.png?ex=69b0ddc8&is=69af8c48&hm=cc39c00742d3a79f6951870d01481a4d125e94e3dd4abeb3069c6c0ef11a3005&=&format=webp&quality=lossless&width=700&height=700';
+
     const embed = new EmbedBuilder()
-      .setTitle('📋 PSL Command Help')
-      .setDescription('Here are all the available commands in the Pure Soccer League bot:')
-      .setColor(0x2f3136)
-      .setThumbnail('https://media.discordapp.net/attachments/1480765412651307200/1480765442946629632/PSL_LOGO_WHITE.png?ex=69b0ddc8&is=69af8c48&hm=cc39c00742d3a79f6951870d01481a4d125e94e3dd4abeb3069c6c0ef11a3005&=&format=webp&quality=lossless&width=700&height=700')
+      .setAuthor({
+        name: 'Pure Soccer League',
+        iconURL: PSL_LOGO
+      })
+      .setTitle('📋 Command Reference')
+      .setDescription('All available commands for the PSL bot.')
+      .setColor(0x5865F2)
+      .setThumbnail(PSL_LOGO)
       .setFooter({
-          text: '[PSL] Pure Soccer League - ' + new Date().toLocaleString(),
-          iconURL: 'https://media.discordapp.net/attachments/1480765412651307200/1480765442946629632/PSL_LOGO_WHITE.png?ex=69b0ddc8&is=69af8c48&hm=cc39c00742d3a79f6951870d01481a4d125e94e3dd4abeb3069c6c0ef11a3005&=&format=webp&quality=lossless&width=700&height=700'
+        text: 'PSL · Pure Soccer League',
+        iconURL: PSL_LOGO
       })
       .setTimestamp();
 
-    // plr
     embed.addFields({
       name: '👥 Player Commands',
-      value: 
-        '`/freeagent` - Register yourself as a free agent\n' +
-        '`/friendly` - Look for friendly matches\n',
+      value:
+        '`/freeagent` — Register as a free agent\n' +
+        '`/friendly` — Look for friendly matches',
       inline: false
     });
 
-    // manager
     if (isManager) {
       const teamData = managers[user];
-      embed.addFields({
-        name: '👔 Manager Commands',
-        value: 
-          '`/contract @user` - Send a contract to a player\n' +
-          '`/emergencycontract @user` - Urgent signing of a player if allowed\n' +
-          '`/scout [position] [message]` - Scout for players\n' +
-          '`/release @user` - Release a player from your team\n' +
-          '`/forcerelease @user` - Force release a player *(Admin Only)*\n' +
-          '`/friendly` - Ping other players who are looking for a friendly\n',
-        inline: false
-      });
-
-      embed.addFields({
-        name: '🏆 You Manage',
-        value: `**${teamData.team}**`,
-        inline: true
-      });
+      embed.addFields(
+        {
+          name: '👔 Manager Commands',
+          value:
+            '`/contract @user` — Send a contract to a player\n' +
+            '`/emergencycontract @user` — Emergency signing\n' +
+            '`/scout [position] [message]` — Scout for players\n' +
+            '`/release @user` — Release a player\n' +
+            '`/forcerelease @user` — Force release *(Admin Only)*\n' +
+            '`/friendly` — Announce you are looking for a friendly',
+          inline: false
+        },
+        {
+          name: '🏆 Your Team',
+          value: teamData.team,
+          inline: true
+        }
+      );
     }
 
-    // gen
-    embed.addFields({
-      name: '📍 Available Positions',
-      value: 'GK, RB, LB, CB, CDM, CM, RM, LM, CAM, LW, RW, CF, ST',
-      inline: true
-    });
-
-    embed.addFields({
-      name: '🤝 Friendly Match Options',
-      value: 'DM TO PLAY, IN GAME ALREADY',
-      inline: true
-    });
-
-    embed.addFields({
-      name: '🌍 Available Regions',
-      value: 'GMT, BST, EST, CST, PST, UTC, WEST, EET, EEST, MSK, OTHER',
-      inline: true
-    });
-
-    embed.addFields({
-      name: '❓ Need Help?',
-      value: 
-        '• Free agents are posted in the transfer channel\n' +
-        '• Managers can scout, contract, and release players\n' +
-        '• Players must be released before joining new teams\n' +
-        '• Transfer window must be open for most actions\n' +
-        '• Friendly matches help teams practice and stay active\n' +
-        '• Use image uploads to show your server when "IN GAME ALREADY"',
-      inline: false
-    });
+    embed.addFields(
+      {
+        name: '📍 Positions',
+        value: 'GK · RB · LB · CB · CDM · CM · RM · LM · CAM · LW · RW · CF · ST',
+        inline: false
+      },
+      {
+        name: '🌍 Regions',
+        value: 'GMT · BST · EST · CST · PST · UTC · WEST · EET · EEST · MSK · OTHER',
+        inline: false
+      },
+      {
+        name: '💡 Tips',
+        value:
+          '• Free agents are posted in the transfer channel\n' +
+          '• Players must be released before signing elsewhere\n' +
+          '• Transfer window must be open for contracts\n' +
+          '• Upload a screenshot when using "IN GAME ALREADY"',
+        inline: false
+      }
+    );
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
   }

@@ -13,12 +13,15 @@
   "dependencies": {
     "@types/node": "^22.13.11",
     "axios": "^1.14.0",
+    "country-emoji": "^2.0.1",
     "discord.js": "^14.21.0",
-    "dotenv": "^17.2.1",
+    "dotenv": "^17.4.2",
     "express": "^5.1.0",
-    "firebase-admin": "^13.4.0",
+    "firebase-admin": "^14.0.0",
+    "mongodb": "^7.3.0",
     "mongoose": "^8.23.0",
-    "noblox.js": "^9.0.0",
-    "sqlite3": "^5.1.7"
+    "noblox.js": "^6.0.0",
+    "node-emoji": "^2.2.0",
+    "sqlite3": "^6.0.1"
   }
 }

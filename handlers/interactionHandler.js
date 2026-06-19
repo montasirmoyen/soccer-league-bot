@@ -18,19 +18,24 @@ function registerInteractionHandler(client, emojiMap) {
 
       if (interaction.isModalSubmit() && interaction.customId === 'announceModal') {
         await handleAnnounceModal(interaction, emojiMap);
+        return;
       }
-    } catch (err) {
-      console.error('Error handling interaction:', err);
+    } catch (error) {
+      console.error('[interactionHandler.js] Unhandled interaction error:', error);
 
       const errorMessage = {
-        content: `❌ There was an error:\n\`\`\`${err.stack || err.message}\`\`\``,
+        content: `❌ An unexpected error occurred:\n\`\`\`${error.message}\`\`\``,
         ephemeral: true,
       };
 
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(errorMessage);
-      } else {
-        await interaction.reply(errorMessage);
+      try {
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(errorMessage);
+        } else {
+          await interaction.reply(errorMessage);
+        }
+      } catch (replyError) {
+        console.error('[interactionHandler.js] Failed to send error message:', replyError);
       }
     }
   });

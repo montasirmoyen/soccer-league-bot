@@ -61,7 +61,7 @@ module.exports = {
     try {
       const isStaff = await database.isUserStaffAnywhere(userId);
       if (isStaff) {
-        return interaction.reply({ content: '❌ Management staff cannot register as free agents.', ephemeral: true });
+        return interaction.editReply({ content: '❌ Management staff cannot register as free agents.', ephemeral: true });
       }
 
       const cooldownAmount = 6 * 60 * 60 * 1000;
@@ -75,7 +75,7 @@ module.exports = {
           const hours = Math.floor(timeLeft / 3600);
           const minutes = Math.floor((timeLeft % 3600) / 60);
 
-          return interaction.reply({
+          return interaction.editReply({
             content: `⏰ You're on cooldown! Try again in ${hours}h ${minutes}m.`,
             ephemeral: true,
           });
@@ -84,7 +84,7 @@ module.exports = {
 
       const contract = await database.getContractedTeam(userId);
       if (contract) {
-        return interaction.reply({
+        return interaction.editReply({
           content: `❌ You are already contracted to **${contract.teamName}**.`,
           ephemeral: true,
         });
@@ -105,20 +105,20 @@ module.exports = {
 
       const targetChannel = await interaction.client.channels.fetch(constants.FREEAGENT_CHANNEL_ID);
       if (!targetChannel) {
-        return interaction.reply({
+        return interaction.editReply({
           content: '⚠️ Could not find the free agent channel.',
           ephemeral: true,
         });
       }
 
       await targetChannel.send({ content: `<@${userId}>`, embeds: [embed] });
-      await interaction.reply({
+      await interaction.editReply({
         content: '✅ You have been registered as a free agent!',
         ephemeral: true,
       });
     } catch (error) {
       console.error('❌ Error in /freeagent:', error);
-      return interaction.reply({ content: '❌ An error occurred while registering as a free agent.', ephemeral: true });
+      return interaction.editReply({ content: '❌ An error occurred while registering as a free agent.', ephemeral: true });
     }
   },
 };

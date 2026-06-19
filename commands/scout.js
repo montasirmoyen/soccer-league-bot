@@ -49,7 +49,7 @@ module.exports = {
     try {
       const staffRecord = await database.isUserStaffAnywhere(user);
       if (!staffRecord) {
-        return interaction.reply({ content: '❌ You are not an authorized manager.', ephemeral: true });
+        return interaction.editReply({ content: '❌ You are not an authorized manager.', ephemeral: true });
       }
 
       const cooldownAmount = 3 * 60 * 60 * 1000;
@@ -63,7 +63,7 @@ module.exports = {
           const hours = Math.floor(timeLeft / 3600);
           const minutes = Math.floor((timeLeft % 3600) / 60);
 
-          return interaction.reply({
+          return interaction.editReply({
             content: `⏰ You're on cooldown! You can scout again in ${hours}h ${minutes}m.`,
             ephemeral: true,
           });
@@ -91,19 +91,19 @@ module.exports = {
       const targetChannel = await interaction.client.channels.fetch(constants.SCOUT_CHANNEL_ID);
       if (targetChannel) {
         await targetChannel.send({ embeds: [embed] });
-        await interaction.reply({
+        await interaction.editReply({
           content: '✅ Your scouting message has been posted!',
           ephemeral: true,
         });
       } else {
-        await interaction.reply({
+        await interaction.editReply({
           content: '⚠️ Could not find the scouting channel.',
           ephemeral: true,
         });
       }
     } catch (error) {
       console.error('❌ Error in /scout:', error);
-      return interaction.reply({ content: '❌ An error occurred while posting your scout.', ephemeral: true });
+      return interaction.editReply({ content: '❌ An error occurred while posting your scout.', ephemeral: true });
     }
   },
 };

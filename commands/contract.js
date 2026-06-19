@@ -22,7 +22,7 @@ module.exports = {
     const targetUser = interaction.options.getUser('signee');
 
     if (targetUser.bot) {
-      return interaction.reply({ content: '❌ You cannot send a contract to a bot.', flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ content: '❌ You cannot send a contract to a bot.', flags: MessageFlags.Ephemeral });
     }
 
     try {
@@ -37,19 +37,19 @@ module.exports = {
       const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam).toUpperCase()}**`;
 
       if (!isWindowOpen) {
-        return interaction.reply({ content: '🔒 The transfer window is currently **CLOSED**. Offers cannot be sent.', flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: '🔒 The transfer window is currently **CLOSED**. Offers cannot be sent.', flags: MessageFlags.Ephemeral });
       }
       if (!canManageTeam(interaction.member, teamInfo)) {
-        return interaction.reply({ content: `❌ You do not have permission to offer contracts for ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ You do not have permission to offer contracts for ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });
       }
       if (isStaffSomewhere) {
-        return interaction.reply({ content: `❌ <@${targetUser.id}> is management staff for **${isStaffSomewhere.name}** and cannot sign as a player.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ <@${targetUser.id}> is management staff for **${isStaffSomewhere.name}** and cannot sign as a player.`, flags: MessageFlags.Ephemeral });
       }
       if (activeContract) {
-        return interaction.reply({ content: `❌ <@${targetUser.id}> already has a contract with **${builderHelpers.getFormattedTeamName(activeContract.teamName).toUpperCase()}**.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ <@${targetUser.id}> already has a contract with **${builderHelpers.getFormattedTeamName(activeContract.teamName).toUpperCase()}**.`, flags: MessageFlags.Ephemeral });
       }
       if (currentSquad.length >= constants.MAX_ROSTER_SIZE) {
-        return interaction.reply({ content: `❌ **Roster limit reached!** ${formattedTeamName} already has ${constants.MAX_ROSTER_SIZE} registered players.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ **Roster limit reached!** ${formattedTeamName} already has ${constants.MAX_ROSTER_SIZE} registered players.`, flags: MessageFlags.Ephemeral });
       }
 
       const role = await builderHelpers.getTeamRole(interaction.client, selectedTeam);
@@ -64,14 +64,14 @@ module.exports = {
 
       await targetUser.send({ embeds: [contractEmbed], components: [row] });
 
-      return interaction.reply({ content: `📨 Contract offer sent to <@${targetUser.id}>'s DM for ${formattedTeamName}!`, flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ content: `📨 Contract offer sent to <@${targetUser.id}>'s DM for ${formattedTeamName}!`, flags: MessageFlags.Ephemeral });
       
     } catch (error) {
       if (error.code === 50007) {
-        return interaction.reply({ content: `❌ Could not send the offer. <@${targetUser.id}> likely has DMs closed.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ Could not send the offer. <@${targetUser.id}> likely has DMs closed.`, flags: MessageFlags.Ephemeral });
       }
       console.error('❌ Error in /contract:', error);
-      return interaction.reply({ content: '❌ An error occurred while processing the contract offer.', flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ content: '❌ An error occurred while processing the contract offer.', flags: MessageFlags.Ephemeral });
     }
   },
 };

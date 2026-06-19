@@ -44,7 +44,7 @@ module.exports = {
       const expirationTime = cooldowns.get(userId) + COOLDOWN_TIME;
       if (now < expirationTime) {
         const timeLeft = Math.ceil((expirationTime - now) / 1000);
-        return interaction.reply({
+        return interaction.editReply({
           content: `⏳ Please wait ${timeLeft} more second(s) before using this command again.`,
           ephemeral: true,
         });
@@ -57,13 +57,13 @@ module.exports = {
     const image = interaction.options.getAttachment('image');
 
     if (type === 'IN GAME ALREADY' && !image) {
-      return interaction.reply({
+      return interaction.editReply({
         content: '❌ You must upload an image when type is "IN GAME ALREADY".',
         ephemeral: true,
       });
     }
     if (type === 'DM TO PLAY' && image) {
-      return interaction.reply({
+      return interaction.editReply({
         content: '❌ You cannot upload an image when type is "DM TO PLAY".',
         ephemeral: true,
       });
@@ -116,11 +116,11 @@ module.exports = {
 
       const channel = await interaction.client.channels.fetch(constants.FRIENDLY_CHANNEL_ID);
       await channel.send({ content: pingString, embeds: [embed] });
-      await interaction.reply({ content: '✅ Your friendly announcement has been sent!', ephemeral: true });
+      await interaction.editReply({ content: '✅ Your friendly announcement has been sent!', ephemeral: true });
     } catch (error) {
       console.error('❌ Error in /friendly:', error);
       cooldowns.delete(userId);
-      await interaction.reply({ content: '❌ Failed to send friendly announcement.', ephemeral: true });
+      await interaction.editReply({ content: '❌ Failed to send friendly announcement.', ephemeral: true });
     }
   },
 };

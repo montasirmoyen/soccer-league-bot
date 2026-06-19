@@ -27,7 +27,7 @@ module.exports = {
 
   async execute(interaction) {
     if (!isChairman(interaction.member)) {
-      return interaction.reply({ content: '❌ Only Chairmen can use this command.', flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ content: '❌ Only Chairmen can use this command.', flags: MessageFlags.Ephemeral });
     }
 
     const selectedTeam = interaction.options.getString('team');
@@ -35,7 +35,7 @@ module.exports = {
     const appointee = interaction.options.getUser('appointee');
 
     if (appointee?.bot) {
-      return interaction.reply({ content: '❌ You cannot appoint a bot.', flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ content: '❌ You cannot appoint a bot.', flags: MessageFlags.Ephemeral });
     }
 
     try {
@@ -46,7 +46,7 @@ module.exports = {
       ]);
 
       if (!teamInfo) {
-        return interaction.reply({ content: '❌ Team not found in database.', flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: '❌ Team not found in database.', flags: MessageFlags.Ephemeral });
       }
 
       const isManager = selectedRole === 'manager';
@@ -57,7 +57,7 @@ module.exports = {
 
       if (!appointee) {
         if (!currentStaffId) {
-          return interaction.reply({ content: `❌ The **${roleName}** position for ${formattedTeamName} is already empty.`, flags: MessageFlags.Ephemeral });
+          return interaction.editReply({ content: `❌ The **${roleName}** position for ${formattedTeamName} is already empty.`, flags: MessageFlags.Ephemeral });
         }
 
         await database.appointStaff(selectedTeam, null, selectedRole);
@@ -71,17 +71,17 @@ module.exports = {
           }
         });
 
-        return interaction.reply({ content: `🧹 The **${roleName}** position for ${formattedTeamName} has been cleared.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `🧹 The **${roleName}** position for ${formattedTeamName} has been cleared.`, flags: MessageFlags.Ephemeral });
       }
 
       if (teamInfo.manager === appointee.id || teamInfo.assistantManager === appointee.id) {
-        return interaction.reply({ content: `❌ <@${appointee.id}> is already in the management of this team. Demote or clear them first.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ <@${appointee.id}> is already in the management of this team. Demote or clear them first.`, flags: MessageFlags.Ephemeral });
       }
       if (isStaffElsewhere) {
-        return interaction.reply({ content: `❌ <@${appointee.id}> is already staff for **${isStaffElsewhere.name}**.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ <@${appointee.id}> is already staff for **${isStaffElsewhere.name}**.`, flags: MessageFlags.Ephemeral });
       }
       if (existingContract) {
-        return interaction.reply({ content: `❌ <@${appointee.id}> is a registered player for **${existingContract.teamName}**. Release them first.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ <@${appointee.id}> is a registered player for **${existingContract.teamName}**. Release them first.`, flags: MessageFlags.Ephemeral });
       }
 
       await database.appointStaff(selectedTeam, appointee.id, selectedRole);
@@ -126,9 +126,9 @@ module.exports = {
     } catch (error) {
       console.error('❌ Critical error in /appoint:', error);
       if (error.code === 50013 && !interaction.replied) {
-        return interaction.reply({ content: '❌ **Hierarchy Error:** Move the bot\'s role higher in Server Settings.', flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: '❌ **Hierarchy Error:** Move the bot\'s role higher in Server Settings.', flags: MessageFlags.Ephemeral });
       }
-      if (!interaction.replied) interaction.reply({ content: '❌ An error occurred during appointment.', flags: MessageFlags.Ephemeral });
+      if (!interaction.replied) interaction.editReply({ content: '❌ An error occurred during appointment.', flags: MessageFlags.Ephemeral });
     }
   },
 };

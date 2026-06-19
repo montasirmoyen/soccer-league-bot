@@ -48,11 +48,11 @@ module.exports = {
     try {
       const member = await interaction.guild.members.fetch(userId).catch(() => null);
       if (!member) {
-        return interaction.reply({ content: '❌ Could not verify your membership.', ephemeral: true });
+        return interaction.editReply({ content: '❌ Could not verify your membership.', ephemeral: true });
       }
 
       if (!member.roles.cache.has(SCRIM_HOSTER_ROLE_ID) && !member.roles.cache.has(STAFF_ROLE_ID)) {
-        return interaction.reply({
+        return interaction.editReply({
           content: '❌ You do not have permission to use this command.',
           ephemeral: true,
         });
@@ -63,7 +63,7 @@ module.exports = {
         const expirationTime = cooldowns.get(userId) + COOLDOWN_TIME;
         if (now < expirationTime) {
           const timeLeft = Math.ceil((expirationTime - now) / 1000);
-          return interaction.reply({
+          return interaction.editReply({
             content: `⏳ Please wait ${timeLeft} more second(s) before using this command again.`,
             ephemeral: true,
           });
@@ -105,11 +105,11 @@ module.exports = {
 
       const channel = await interaction.client.channels.fetch(SCRIM_CHANNEL_ID);
       await channel.send({ content: pingString, embeds: [embed] });
-      await interaction.reply({ content: '✅ Your scrim announcement has been sent!', ephemeral: true });
+      await interaction.editReply({ content: '✅ Your scrim announcement has been sent!', ephemeral: true });
     } catch (error) {
       console.error('❌ Error in /scrim:', error);
       cooldowns.delete(userId);
-      await interaction.reply({ content: '❌ Failed to send scrim announcement.', ephemeral: true });
+      await interaction.editReply({ content: '❌ Failed to send scrim announcement.', ephemeral: true });
     }
   },
 };

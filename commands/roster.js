@@ -40,10 +40,10 @@ module.exports = {
           { name: '🚨 Emergency Signs', value: `**${teamInfo?.emergencySignsUsed ?? 0}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}** used`, inline: true }
         );
 
-      return interaction.reply({ embeds: [rosterEmbed], flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ embeds: [rosterEmbed], flags: MessageFlags.Ephemeral });
     } catch (error) {
       console.error(`❌ Error in /roster for ${selectedTeam}:`, error);
-      return interaction.reply({ content: '❌ Failed to generate team roster.', flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ content: '❌ Failed to generate team roster.', flags: MessageFlags.Ephemeral });
     }
   },
 };

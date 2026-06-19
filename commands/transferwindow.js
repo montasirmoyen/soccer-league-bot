@@ -16,7 +16,7 @@ module.exports = {
     
   async execute(interaction) {
     if (!isChairman(interaction.member)) {
-      return interaction.reply({ content: '❌ Only Chairmen are allowed to toggle the transfer window.', ephemeral: true });
+      return interaction.editReply({ content: '❌ Only Chairmen are allowed to toggle the transfer window.', ephemeral: true });
     }
 
     const targetStatus = interaction.options.getBoolean('status');
@@ -24,7 +24,7 @@ module.exports = {
     try {
       const currentStatus = await database.getTransferWindowState();
       if (currentStatus === targetStatus) {
-        return interaction.reply({ 
+        return interaction.editReply({ 
           content: targetStatus ? '🔓 The transfer window is already **OPEN**. No changes made.' : '🔒 The transfer window is already **CLOSED**. No changes made.', 
           ephemeral: true 
         });
@@ -32,7 +32,7 @@ module.exports = {
 
       await database.setTransferWindowState(targetStatus);
 
-      interaction.reply({ content: targetStatus ? '🔓 The transfer window is now officially **OPEN**!' : '🔒 The transfer window is now officially **CLOSED**!' });
+      interaction.editReply({ content: targetStatus ? '🔓 The transfer window is now officially **OPEN**!' : '🔒 The transfer window is now officially **CLOSED**!' });
 
       (async () => {
         const channel = await interaction.client.channels.fetch(constants.TRANSFER_WINDOW_CHANNEL_ID).catch(() => null);
@@ -63,7 +63,7 @@ module.exports = {
 
     } catch (dbError) {
       console.error('❌ Database error in /transferwindow:', dbError);
-      if (!interaction.replied) interaction.reply({ content: '❌ Internal database error while toggling the transfer window.', ephemeral: true });
+      if (!interaction.replied) interaction.editReply({ content: '❌ Internal database error while toggling the transfer window.', ephemeral: true });
     }
   },
 };

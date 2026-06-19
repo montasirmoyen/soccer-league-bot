@@ -119,7 +119,9 @@ function withTimeout(promise, ms, timeoutMessage) {
 async function safeDefer(interaction) {
   try {
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferUpdate().catch(() => { });
+      if (interaction.commandName !== 'announce') {
+        await interaction.deferReply({ ephemeral: true }).catch(() => { });
+      }
     }
   } catch (e) {
     console.warn('[index.js] Defer failed:', e.message);
@@ -244,7 +246,9 @@ async function bootstrap() {
 
     try {
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true }).catch(() => { });
+        if (interaction.commandName !== 'announce') {
+          await interaction.deferReply({ ephemeral: true }).catch(() => { });
+        }
       }
 
       await withTimeout(
@@ -382,12 +386,12 @@ async function processAcceptance(interaction, client, teamName, userId, issuerId
     // Processo de assinatura 
     const targetMember = await guild.members.fetch(userId);
     await database.contractPlayer(userId, teamName, '⚽');
-    
+
     let updatedTeamInfo = teamInfo;
     if (isEmergency) {
       updatedTeamInfo = await database.incrementEmergencySign(teamName);
     }
-    
+
     await safeRoleAdd(targetMember, teamInfo.roleId);
 
     const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName).toUpperCase()}**`;
@@ -398,7 +402,7 @@ async function processAcceptance(interaction, client, teamName, userId, issuerId
         try {
           const { manager, assistant } = await fetchTeamStaff(teamName);
           const capacityText = await builderHelpers.getDisplayedPlayersAmount(teamName);
-          
+
           const signingEmbed = buildPSLEmbed(client, embedColor)
             .setTitle(isEmergency ? `🚨 ${formattedTeamName} EMERGENCY SIGNING` : `${formattedTeamName} OFFICIAL SIGNING`);
 
@@ -430,12 +434,12 @@ async function processAcceptance(interaction, client, teamName, userId, issuerId
     ]).catch(() => { });
 
     return await safeRespond(interaction, {
-      content: isEmergency 
-        ? `🎉 You joined ${formattedTeamName} via Emergency Signing!` 
+      content: isEmergency
+        ? `🎉 You joined ${formattedTeamName} via Emergency Signing!`
         : `🎉 **Success!** You're now officially part of ${formattedTeamName}!`,
       ephemeral: true,
     });
-    
+
   } catch (error) {
     console.error(`❌ Process accept error (Emergency: ${isEmergency}):`, error.message);
     return await safeRespond(interaction, {

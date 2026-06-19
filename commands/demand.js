@@ -17,7 +17,7 @@ module.exports = {
     try {
       const activeContract = await database.getContractedTeam(userId);
       if (!activeContract) {
-        return interaction.reply({ content: '❌ You do not have an active contract. You are already a Free Agent.', flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: '❌ You do not have an active contract. You are already a Free Agent.', flags: MessageFlags.Ephemeral });
       }
 
       const playerTeam = activeContract.teamName;
@@ -27,10 +27,10 @@ module.exports = {
       ]);
 
       if (teamInfo && isTeamStaff(teamInfo, userId)) {
-        return interaction.reply({ content: '❌ Management staff cannot use the demand command.', flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: '❌ Management staff cannot use the demand command.', flags: MessageFlags.Ephemeral });
       }
       if (demandsUsed >= constants.MAX_DEMANDS_PER_SEASON) {
-        return interaction.reply({ content: `❌ **Seasonal limit reached!** You have used all ${constants.MAX_DEMANDS_PER_SEASON} demands this season.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ **Seasonal limit reached!** You have used all ${constants.MAX_DEMANDS_PER_SEASON} demands this season.`, flags: MessageFlags.Ephemeral });
       }
 
       await database.releasePlayer(userId);
@@ -39,7 +39,7 @@ module.exports = {
       const remainingDemands = constants.MAX_DEMANDS_PER_SEASON - updatedHistory.demandsUsed;
       const formattedTeamName = `**${playerTeam.toUpperCase()}**`;
 
-      interaction.reply({ content: `✅ You have left ${formattedTeamName}. You have **${remainingDemands}** demand(s) remaining this season.`, flags: MessageFlags.Ephemeral });
+      interaction.editReply({ content: `✅ You have left ${formattedTeamName}. You have **${remainingDemands}** demand(s) remaining this season.`, flags: MessageFlags.Ephemeral });
 
       (async () => {
         if (teamInfo?.roleId) {
@@ -73,7 +73,7 @@ module.exports = {
 
     } catch (error) {
       console.error('❌ Error in /demand:', error);
-      if (!interaction.replied) interaction.reply({ content: '❌ An error occurred processing your demand.', flags: MessageFlags.Ephemeral });
+      if (!interaction.replied) interaction.editReply({ content: '❌ An error occurred processing your demand.', flags: MessageFlags.Ephemeral });
     }
   },
 };

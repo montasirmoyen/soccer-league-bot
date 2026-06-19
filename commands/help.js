@@ -144,10 +144,10 @@ module.exports = {
         }
       );
 
-      await interaction.reply({ embeds: [mainEmbed], ephemeral: true });
+      await interaction.editReply({ embeds: [mainEmbed], ephemeral: true });
     } catch (error) {
       console.error('❌ Error in /help:', error);
-      return interaction.reply({ content: '❌ An error occurred generating help.', ephemeral: true });
+      return interaction.editReply({ content: '❌ An error occurred generating help.', ephemeral: true });
     }
   },
 };

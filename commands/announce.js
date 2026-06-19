@@ -16,7 +16,7 @@ module.exports = {
     console.log(`\n📢 [announce.js] Announcement modal triggered by ${interaction.user.tag}`);
 
     if (!isChairman(interaction.member)) {
-      return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
+      return interaction.editReply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
     }
 
     try {
@@ -37,7 +37,7 @@ module.exports = {
       await interaction.showModal(modal);
     } catch (error) {
       console.error('❌ Error in /announce:', error);
-      return interaction.reply({ content: '❌ An error occurred while opening the announcement modal.', ephemeral: true });
+      return interaction.editReply({ content: '❌ An error occurred while opening the announcement modal.', ephemeral: true });
     }
   },
 };

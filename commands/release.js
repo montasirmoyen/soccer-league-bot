@@ -18,7 +18,7 @@ module.exports = {
     const targetUser = interaction.options.getUser('player');
 
     if (targetUser.bot) {
-      return interaction.reply({ content: '❌ Bots do not have contracts.', flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ content: '❌ Bots do not have contracts.', flags: MessageFlags.Ephemeral });
     }
 
     try {
@@ -28,10 +28,10 @@ module.exports = {
       ]);
 
       if (!isWindowOpen) {
-        return interaction.reply({ content: '🔒 The transfer window is **CLOSED**. Players cannot be released right now.', flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: '🔒 The transfer window is **CLOSED**. Players cannot be released right now.', flags: MessageFlags.Ephemeral });
       }
       if (!activeContract) {
-        return interaction.reply({ content: `❌ <@${targetUser.id}> is already a **Free Agent**.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ <@${targetUser.id}> is already a **Free Agent**.`, flags: MessageFlags.Ephemeral });
       }
 
       const playerTeam = activeContract.teamName;
@@ -39,12 +39,12 @@ module.exports = {
       const formattedTeamName = `**${builderHelpers.getFormattedTeamName(playerTeam).toUpperCase()}**`;
 
       if (!canManageTeam(interaction.member, teamInfo)) {
-        return interaction.reply({ content: `❌ You do not have permission to release players from ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ You do not have permission to release players from ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });
       }
 
       await database.releasePlayer(targetUser.id);
       
-      interaction.reply({ content: `✅ <@${targetUser.id}> has been released from ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });
+      interaction.editReply({ content: `✅ <@${targetUser.id}> has been released from ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });
 
       (async () => {
         const targetMember = await safeFetchMember(interaction.guild, targetUser.id);
@@ -80,7 +80,7 @@ module.exports = {
 
     } catch (error) {
       console.error('❌ Error in /release:', error);
-      if (!interaction.replied) interaction.reply({ content: '❌ An error occurred during release.', ephemeral: true });
+      if (!interaction.replied) interaction.editReply({ content: '❌ An error occurred during release.', ephemeral: true });
     }
   },
 };

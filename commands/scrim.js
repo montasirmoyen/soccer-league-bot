@@ -47,7 +47,6 @@ module.exports = {
 
     try {
       const member = await interaction.guild.members.fetch(userId).catch(() => null);
-
       if (!member) {
         return interaction.reply({ content: '❌ Could not verify your membership.', ephemeral: true });
       }

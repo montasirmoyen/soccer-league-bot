@@ -8,47 +8,78 @@ const { startHealthServer } = require('./web/healthServer');
 const database = require('./db/database');
 const constants = require('./config/constants');
 const builderHelpers = require('./utils/builderHelpers');
+const errorHandler = require('./utils/errorHandler');
 const { buildPSLEmbed } = require('./utils/embedHelpers');
 const { safeRoleAdd } = require('./utils/discordHelpers');
+const { logError, replyWithError } = require('./utils/errorHandler');
+
+class UserFacingError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'UserFacingError';
+  }
+}
+
+class TimeoutError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'TimeoutError';
+  }
+}
+
+const TIMERS = {
+  DEFAULT_COMMAND_COOLDOWN_MS: 2000,
+  MANAGING_COMMAND_COOLDOWN_MS: 4000,
+  BUTTON_COOLDOWN_MS: 1000,
+  COMMAND_EXECUTION_TIMEOUT_MS: 30000,
+  ACCEPT_FLOW_TIMEOUT_MS: 25000,
+  DB_CHECK_TIMEOUT_MS: 8000,
+  GUILD_FETCH_TIMEOUT_MS: 8000,
+  MEMBER_FETCH_TIMEOUT_MS: 5000,
+  DB_SAVE_TIMEOUT_MS: 5000,
+  ROLE_ASSIGNMENT_TIMEOUT_MS: 5000,
+  NOTIFICATION_TIMEOUT_MS: 5000,
+  PLAYER_OPERATION_LOCK_MS: 30000,
+  CLEANUP_INTERVAL_MS: 10 * 60 * 1000,
+};
+
+const MANAGING_COMMANDS = ['contract', 'emergencysign', 'release', 'scout', 'scrim', 'appoint', 'announce'];
 
 const userCooldowns = new Map();
 const buttonCooldowns = new Map();
 const playerOperations = new Map();
 
-function hasUserCooldown(userId, command, cooldownMs = 3000) {
+function hasUserCooldown(userId, command) {
   const key = `${userId}:${command}`;
-  if (!userCooldowns.has(key)) return false;
   const cooldownData = userCooldowns.get(key);
+  if (!cooldownData) return false;
   if (Date.now() < cooldownData.coolUntilMs) return true;
   userCooldowns.delete(key);
   return false;
 }
 
-function setUserCooldown(userId, command, cooldownMs = 3000) {
+function setUserCooldown(userId, command, cooldownMs = TIMERS.DEFAULT_COMMAND_COOLDOWN_MS) {
   const key = `${userId}:${command}`;
   userCooldowns.set(key, { coolUntilMs: Date.now() + cooldownMs });
 }
 
 function hasButtonCooldown(userId, buttonId) {
   const key = `${userId}:${buttonId}`;
-  if (!buttonCooldowns.has(key)) return false;
   const timestamp = buttonCooldowns.get(key);
-  if (Date.now() - timestamp < 1000) return true;
+  if (!timestamp) return false;
+  if (Date.now() - timestamp < TIMERS.BUTTON_COOLDOWN_MS) return true;
   buttonCooldowns.delete(key);
   return false;
 }
 
 function setButtonCooldown(userId, buttonId) {
-  const key = `${userId}:${buttonId}`;
-  buttonCooldowns.set(key, Date.now());
+  buttonCooldowns.set(`${userId}:${buttonId}`, Date.now());
 }
 
-function checkPlayerOperationConflict(playerId, operation, teamName) {
-  if (!playerOperations.has(playerId)) return null;
+function checkPlayerOperationConflict(playerId) {
   const existing = playerOperations.get(playerId);
-  if (existing.expiresAt > Date.now()) {
-    return existing;
-  }
+  if (!existing) return null;
+  if (existing.expiresAt > Date.now()) return existing;
   playerOperations.delete(playerId);
   return null;
 }
@@ -57,7 +88,7 @@ function recordPlayerOperation(playerId, operation, teamName) {
   playerOperations.set(playerId, {
     operation,
     teamName,
-    expiresAt: Date.now() + 5000,
+    expiresAt: Date.now() + TIMERS.PLAYER_OPERATION_LOCK_MS,
   });
 }
 
@@ -65,10 +96,23 @@ function clearPlayerOperation(playerId) {
   playerOperations.delete(playerId);
 }
 
-function withTimeout(promise, ms, timeoutError) {
+function cleanupExpiredEntries() {
+  const now = Date.now();
+  for (const [key, data] of userCooldowns) {
+    if (now >= data.coolUntilMs) userCooldowns.delete(key);
+  }
+  for (const [key, timestamp] of buttonCooldowns) {
+    if (now - timestamp >= TIMERS.BUTTON_COOLDOWN_MS) buttonCooldowns.delete(key);
+  }
+  for (const [key, data] of playerOperations) {
+    if (now >= data.expiresAt) playerOperations.delete(key);
+  }
+}
+
+function withTimeout(promise, ms, timeoutMessage) {
   return Promise.race([
     promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(timeoutError)), ms)),
+    new Promise((_, reject) => setTimeout(() => reject(new TimeoutError(timeoutMessage)), ms)),
   ]);
 }
 
@@ -79,6 +123,18 @@ async function safeDefer(interaction) {
     }
   } catch (e) {
     console.warn('[index.js] Defer failed:', e.message);
+  }
+}
+
+async function safeRespond(interaction, payload) {
+  try {
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(payload).catch(() => { });
+    } else {
+      await interaction.reply(payload).catch(() => { });
+    }
+  } catch (responseError) {
+    console.error('❌ Failed to send response to user:', responseError.message);
   }
 }
 
@@ -151,6 +207,8 @@ async function bootstrap() {
   const commands = loadCommands(client);
   await registerCommands(commands);
 
+  setInterval(cleanupExpiredEntries, TIMERS.CLEANUP_INTERVAL_MS).unref();
+
   client.once('clientReady', () => {
     console.log(`\n🤖 Bot online as: ${client.user.tag} (${client.user.id})`);
     client.user.setPresence({
@@ -169,10 +227,11 @@ async function bootstrap() {
 
     const userId = interaction.user.id;
     const command = interaction.commandName;
-    const managingCommands = ['contract', 'emergencysign', 'release', 'scout', 'scrim', 'appoint', 'announce'];
-    const cooldownDuration = managingCommands.includes(command) ? 4000 : 2000;
+    const cooldownDuration = MANAGING_COMMANDS.includes(command)
+      ? TIMERS.MANAGING_COMMAND_COOLDOWN_MS
+      : TIMERS.DEFAULT_COMMAND_COOLDOWN_MS;
 
-    if (hasUserCooldown(userId, command, cooldownDuration)) {
+    if (hasUserCooldown(userId, command)) {
       return interaction.reply({
         content: `⏳ Please wait before using /${command} again.`,
         ephemeral: true,
@@ -190,23 +249,32 @@ async function bootstrap() {
 
       await withTimeout(
         commandData.execute(interaction),
-        30000,
+        TIMERS.COMMAND_EXECUTION_TIMEOUT_MS,
         'Command took too long to execute'
       );
 
       setUserCooldown(userId, command, cooldownDuration);
     } catch (error) {
-      console.error(`❌ Error in /${interaction.commandName}:`, error.message);
-      const errorPayload = { content: '❌ An error occurred. Please try again.', ephemeral: true };
-      try {
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp(errorPayload).catch(() => { });
-        } else {
-          await interaction.reply(errorPayload).catch(() => { });
-        }
-      } catch (responseError) {
-        console.error('❌ Failed to send error response:', responseError.message);
+      if (error instanceof UserFacingError) {
+        logError(error, { userId, command });
+        return await replyWithError(interaction, error);
       }
+
+      if (error instanceof TimeoutError) {
+        console.warn(`⏱️  /${command} timed out for ${interaction.user.tag}`);
+        await safeRespond(interaction, {
+          content: '⏱️ This is taking longer than expected. Please try again in a moment.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      console.error(`❌ Error in /${interaction.commandName}:`, error.message);
+      setUserCooldown(userId, command, cooldownDuration);
+      await safeRespond(interaction, {
+        content: '❌ Something went wrong on our end. Please try again, and let staff know if it keeps happening.',
+        ephemeral: true,
+      });
     }
   });
 
@@ -221,345 +289,159 @@ async function handleButtonInteraction(interaction, client) {
     const userId = interaction.user.id;
 
     if (userId !== targetPlayerId) {
-      return await interaction.followUp({
-        content: '❌ This button is not for you.',
-        ephemeral: true,
-      }).catch(() => { });
+      return await safeRespond(interaction, { content: '❌ This button is not for you.', ephemeral: true });
     }
 
     if (hasButtonCooldown(userId, interaction.customId)) {
-      return await interaction.followUp({
-        content: '⏳ You already interacted with this offer. Please wait.',
-        ephemeral: true,
-      }).catch(() => { });
+      return await safeRespond(interaction, { content: '⏳ You already interacted with this offer. Please wait.', ephemeral: true });
     }
     setButtonCooldown(userId, interaction.customId);
 
-    const conflict = checkPlayerOperationConflict(userId, action, teamName);
+    const conflict = checkPlayerOperationConflict(userId);
     if (conflict) {
-      return await interaction.followUp({
-        content: `❌ Another action is already processing. Please try again.`,
-        ephemeral: true,
-      }).catch(() => { });
+      return await safeRespond(interaction, { content: '❌ Another action is already processing. Please try again.', ephemeral: true });
     }
     recordPlayerOperation(userId, action, teamName);
 
     console.log(`\n🖱️ Button [${action}] by ${userId} for team: ${teamName}`);
 
-    if (action === 'refuse') {
+    const isEmergency = action.startsWith('emergency');
+
+    if (action === 'refuse' || action === 'emergencyrefuse') {
       try {
         await withTimeout(
-          notifyOfferingStaff(client, issuerId, userId, teamName, false, false),
-          5000,
-          'Notification timeout'
+          notifyOfferingStaff(client, issuerId, userId, teamName, false, isEmergency),
+          TIMERS.NOTIFICATION_TIMEOUT_MS, 'Notification timeout'
         );
-        return await interaction.followUp({
-          content: `❌ You have **refused** the contract offer from **${teamName}**.`,
+        const offerType = isEmergency ? 'emergency offer' : 'contract offer';
+        return await safeRespond(interaction, {
+          content: `❌ You have **refused** the ${offerType} from **${builderHelpers.getFormattedTeamName(teamName).toUpperCase()}**.`,
           ephemeral: true,
-        }).catch(() => { });
-      } catch (err) {
-        console.warn('[index.js] Refuse error:', err.message);
-        return await interaction.followUp({
-          content: '✅ Your refusal has been recorded.',
-          ephemeral: true,
-        }).catch(() => { });
+        });
+      } catch (error) {
+        logError(error, { userId, teamName, action });
+        return await safeRespond(interaction, { content: '✅ Your refusal has been recorded.', ephemeral: true });
       } finally {
         clearPlayerOperation(userId);
       }
     }
 
-    if (action === 'emergencyrefuse') {
-      try {
-        const formattedTeamName = builderHelpers.getFormattedTeamName(teamName).toUpperCase();
-        await withTimeout(
-          notifyOfferingStaff(client, issuerId, userId, teamName, false, true),
-          5000,
-          'Notification timeout'
-        );
-        return await interaction.followUp({
-          content: `❌ You have **refused** the emergency offer from **${formattedTeamName}**.`,
-          ephemeral: true,
-        }).catch(() => { });
-      } catch (err) {
-        console.warn('[index.js] Emergency refuse error:', err.message);
-        return await interaction.followUp({
-          content: '✅ Your refusal has been recorded.',
-          ephemeral: true,
-        }).catch(() => { });
-      } finally {
-        clearPlayerOperation(userId);
-      }
-    }
-
-    if (action === 'accept') {
+    if (action === 'accept' || action === 'emergencyaccept') {
       try {
         return await withTimeout(
-          handleContractAccept(interaction, client, teamName, userId, issuerId),
-          25000,
-          'Contract acceptance took too long'
+          processAcceptance(interaction, client, teamName, userId, issuerId, isEmergency),
+          TIMERS.ACCEPT_FLOW_TIMEOUT_MS, 'Acceptance flow took too long'
         );
       } catch (error) {
-        console.error('[index.js] Contract accept error:', error.message);
-        await interaction.followUp({
-          content: '❌ Error processing contract. Please try again or contact support.',
+        logError(error, { userId, teamName, action });
+        await safeRespond(interaction, {
+          content: '❌ Error processing signing. Please try again or contact support.',
           ephemeral: true,
-        }).catch(() => { });
+        });
       } finally {
         clearPlayerOperation(userId);
       }
     }
 
-    if (action === 'emergencyaccept') {
-      try {
-        return await withTimeout(
-          handleEmergencyAccept(interaction, client, teamName, userId, issuerId),
-          25000,
-          'Emergency acceptance took too long'
-        );
-      } catch (error) {
-        console.error('[index.js] Emergency accept error:', error.message);
-        await interaction.followUp({
-          content: '❌ Error processing emergency signing. Please try again or contact support.',
-          ephemeral: true,
-        }).catch(() => { });
-      } finally {
-        clearPlayerOperation(userId);
-      }
-    }
   } catch (error) {
-    console.error('[index.js] Critical button handler error:', error.message);
-    try {
-      await interaction.followUp({
-        content: '❌ A critical error occurred. Please try again or contact support.',
-        ephemeral: true,
-      }).catch(() => { });
-    } catch (e) {
-      console.error('[index.js] Failed to send error feedback:', e.message);
-    }
+    logError(error, { userId, teamName, action });
+    await safeRespond(interaction, { content: '❌ A critical error occurred. Please try again or contact support.', ephemeral: true });
   }
 }
 
-async function handleContractAccept(interaction, client, teamName, userId, issuerId) {
+async function processAcceptance(interaction, client, teamName, userId, issuerId, isEmergency) {
   try {
-    // ── Check window, contracts, and squad (with timeout) ──
-    const [isWindowOpen, activeContract, squadSize] = await withTimeout(
-      Promise.all([
-        database.getTransferWindowState(),
-        database.getContractedTeam(userId),
-        database.getPlayersByTeam(teamName),
-      ]),
-      8000,
-      'Database check timeout'
-    );
-
-    if (!isWindowOpen) {
-      return await interaction.followUp({
-        content: '❌ **Signing failed:** The transfer window closed while reviewing.',
-        ephemeral: true,
-      }).catch(() => { });
-    }
-
-    if (activeContract) {
-      return await interaction.followUp({
-        content: `❌ **Signing failed:** Already registered with **${activeContract.teamName}**.`,
-        ephemeral: true,
-      }).catch(() => { });
-    }
-
-    if (squadSize.length >= constants.MAX_ROSTER_SIZE) {
-      return await interaction.followUp({
-        content: `❌ **Signing failed:** **${teamName}** roster is full.`,
-        ephemeral: true,
-      }).catch(() => { });
-    }
-
-    // ── Fetch guild and team info (with timeout) ──
     const { guild, teamInfo, embedColor } = await withTimeout(
       fetchTeamAndGuild(client, teamName),
-      8000,
-      'Guild fetch timeout'
+      TIMERS.GUILD_FETCH_TIMEOUT_MS, 'Guild fetch timeout'
     );
 
-    // ── Fetch member and process (with timeout) ──
-    const targetMember = await withTimeout(
-      guild.members.fetch(userId),
-      5000,
-      'Member fetch timeout'
-    );
+    // Validação de limite de emergência
+    if (isEmergency && teamInfo && teamInfo.emergencySignsUsed >= constants.MAX_EMERGENCY_SIGNS_PER_TEAM) {
+      return await safeRespond(interaction, { content: `❌ **Signing failed:** **${teamName}** used all emergency spots.`, ephemeral: true });
+    }
 
-    await withTimeout(
-      database.contractPlayer(userId, teamName, '⚽'),
-      5000,
-      'Database save timeout'
-    );
+    // Consultas no banco
+    const [isWindowOpen, activeContract, squadSize] = await Promise.all([
+      database.getTransferWindowState(),
+      database.getContractedTeam(userId),
+      database.getPlayersByTeam(teamName),
+    ]);
 
-    await withTimeout(
-      safeRoleAdd(targetMember, teamInfo.roleId),
-      5000,
-      'Role assignment timeout'
-    );
+    // Validações pós-banco
+    if (!isEmergency && !isWindowOpen) {
+      return await safeRespond(interaction, { content: '❌ **Signing failed:** The transfer window closed while reviewing.', ephemeral: true });
+    }
+    if (activeContract) {
+      return await safeRespond(interaction, { content: `❌ **Signing failed:** Already registered with **${activeContract.teamName}**.`, ephemeral: true });
+    }
+    if (squadSize.length >= constants.MAX_ROSTER_SIZE) {
+      return await safeRespond(interaction, { content: `❌ **Signing failed:** **${teamName}** roster is full.`, ephemeral: true });
+    }
+
+    // Processo de assinatura 
+    const targetMember = await guild.members.fetch(userId);
+    await database.contractPlayer(userId, teamName, '⚽');
+    
+    let updatedTeamInfo = teamInfo;
+    if (isEmergency) {
+      updatedTeamInfo = await database.incrementEmergencySign(teamName);
+    }
+    
+    await safeRoleAdd(targetMember, teamInfo.roleId);
 
     const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName).toUpperCase()}**`;
 
-    // ── Post to channels (fire-and-forget, non-blocking) ──
+    // Processamento paralelo de Embeds e DMs (Não bloqueia o retorno ao usuário)
     Promise.all([
       (async () => {
         try {
           const { manager, assistant } = await fetchTeamStaff(teamName);
           const capacityText = await builderHelpers.getDisplayedPlayersAmount(teamName);
+          
           const signingEmbed = buildPSLEmbed(client, embedColor)
-            .setTitle(`${formattedTeamName} OFFICIAL SIGNING`)
-            .addFields(
-              {
-                name: 'Player Signed',
-                value: `<@${userId}> has officially joined ${formattedTeamName}! 🎉`,
-              },
-              {
-                name: 'Team Capacity',
-                value: `**${capacityText}**`,
-              }
+            .setTitle(isEmergency ? `🚨 ${formattedTeamName} EMERGENCY SIGNING` : `${formattedTeamName} OFFICIAL SIGNING`);
+
+          if (isEmergency) {
+            const emergencySignsUsed = updatedTeamInfo?.emergencySignsUsed ?? (teamInfo?.emergencySignsUsed + 1);
+            signingEmbed.addFields(
+              { name: 'Player Signed', value: `<@${userId}> has accepted an emergency contract with ${formattedTeamName}! 🚨` },
+              { name: 'Team Capacity', value: `**${capacityText}**` },
+              { name: 'Emergency Spots Used', value: `**${emergencySignsUsed}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}**` }
             );
+          } else {
+            signingEmbed.addFields(
+              { name: 'Player Signed', value: `<@${userId}> has officially joined ${formattedTeamName}! 🎉` },
+              { name: 'Team Capacity', value: `**${capacityText}**` }
+            );
+          }
           await postSigningToChannel(client, signingEmbed, userId, manager, assistant);
         } catch (err) {
-          console.warn('[index.js] Could not post to signings channel:', err.message);
+          logError(err, { userId, teamName, action: 'POST_SIGNING_TO_CHANNEL' });
         }
       })(),
       (async () => {
         try {
-          await notifyOfferingStaff(client, issuerId, userId, teamName, true, false);
+          await notifyOfferingStaff(client, issuerId, userId, teamName, true, isEmergency);
         } catch (err) {
-          console.warn('[index.js] Could not notify staff:', err.message);
+          logError(err, { userId, teamName, action: 'NOTIFY_OFFERING_STAFF' });
         }
       })(),
     ]).catch(() => { });
 
-    return await interaction.followUp({
-      content: `🎉 **Success!** You're now officially part of ${formattedTeamName}!`,
+    return await safeRespond(interaction, {
+      content: isEmergency 
+        ? `🎉 You joined ${formattedTeamName} via Emergency Signing!` 
+        : `🎉 **Success!** You're now officially part of ${formattedTeamName}!`,
       ephemeral: true,
-    }).catch(() => { });
+    });
+    
   } catch (error) {
-    console.error('❌ Contract accept error:', error.message);
-    return await interaction.followUp({
+    console.error(`❌ Process accept error (Emergency: ${isEmergency}):`, error.message);
+    return await safeRespond(interaction, {
       content: '❌ Error processing contract. Your signing may still have been processed.',
       ephemeral: true,
-    }).catch(() => { });
-  }
-}
-
-async function handleEmergencyAccept(interaction, client, teamName, userId, issuerId) {
-  try {
-    // ── Check team info (with timeout) ──
-    const { guild, teamInfo, embedColor } = await withTimeout(
-      fetchTeamAndGuild(client, teamName),
-      8000,
-      'Guild fetch timeout'
-    );
-
-    if (teamInfo && teamInfo.emergencySignsUsed >= constants.MAX_EMERGENCY_SIGNS_PER_TEAM) {
-      return await interaction.followUp({
-        content: `❌ **Signing failed:** **${teamName}** used all emergency spots.`,
-        ephemeral: true,
-      }).catch(() => { });
-    }
-
-    // ── Check squad and contracts (with timeout) ──
-    const [squadSize, activeContract] = await withTimeout(
-      Promise.all([
-        database.getPlayersByTeam(teamName),
-        database.getContractedTeam(userId),
-      ]),
-      8000,
-      'Database check timeout'
-    );
-
-    if (squadSize.length >= constants.MAX_ROSTER_SIZE) {
-      return await interaction.followUp({
-        content: `❌ **Signing failed:** **${teamName}** roster is full.`,
-        ephemeral: true,
-      }).catch(() => { });
-    }
-
-    if (activeContract) {
-      return await interaction.followUp({
-        content: `❌ **Signing failed:** Already have contract with **${activeContract.teamName}**.`,
-        ephemeral: true,
-      }).catch(() => { });
-    }
-
-    // ── Fetch member and process (with timeout) ──
-    const targetMember = await withTimeout(
-      guild.members.fetch(userId),
-      5000,
-      'Member fetch timeout'
-    );
-
-    await withTimeout(
-      database.contractPlayer(userId, teamName, '⚽'),
-      5000,
-      'Database save timeout'
-    );
-
-    const updatedTeamInfo = await withTimeout(
-      database.incrementEmergencySign(teamName),
-      5000,
-      'Emergency increment timeout'
-    );
-
-    await withTimeout(
-      safeRoleAdd(targetMember, teamInfo.roleId),
-      5000,
-      'Role assignment timeout'
-    );
-
-    const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName).toUpperCase()}**`;
-
-    // ── Post to channels (fire-and-forget, non-blocking) ──
-    Promise.all([
-      (async () => {
-        try {
-          const { manager, assistant } = await fetchTeamStaff(teamName);
-          const capacityText = await builderHelpers.getDisplayedPlayersAmount(teamName);
-          const emergencySignsUsed = updatedTeamInfo?.emergencySignsUsed ?? teamInfo?.emergencySignsUsed + 1;
-          const signingEmbed = buildPSLEmbed(client, embedColor)
-            .setTitle(`🚨 ${formattedTeamName} EMERGENCY SIGNING`)
-            .addFields(
-              {
-                name: 'Player Signed',
-                value: `<@${userId}> has accepted an emergency contract with ${formattedTeamName}! 🚨`,
-              },
-              {
-                name: 'Team Capacity',
-                value: `**${capacityText}**`,
-              },
-              {
-                name: 'Emergency Spots Used',
-                value: `**${emergencySignsUsed}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}**`,
-              }
-            );
-          await postSigningToChannel(client, signingEmbed, userId, manager, assistant);
-        } catch (err) {
-          console.warn('[index.js] Could not post to signings channel:', err.message);
-        }
-      })(),
-      (async () => {
-        try {
-          await notifyOfferingStaff(client, issuerId, userId, teamName, true, true);
-        } catch (err) {
-          console.warn('[index.js] Could not notify staff:', err.message);
-        }
-      })(),
-    ]).catch(() => { });
-
-    return await interaction.followUp({
-      content: `🎉 You joined ${formattedTeamName} via Emergency Signing!`,
-      ephemeral: true,
-    }).catch(() => { });
-  } catch (error) {
-    console.error('❌ Emergency accept error:', error.message);
-    return await interaction.followUp({
-      content: '❌ Error processing emergency signing. Your signing may still have been processed.',
-      ephemeral: true,
-    }).catch(() => { });
+    });
   }
 }
 

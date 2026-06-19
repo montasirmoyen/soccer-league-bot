@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builderHelpers');
@@ -27,7 +27,7 @@ module.exports = {
 
   async execute(interaction) {
     if (!isChairman(interaction.member)) {
-      return interaction.reply({ content: '❌ Only Chairmen can use this command.', ephemeral: true });
+      return interaction.reply({ content: '❌ Only Chairmen can use this command.', flags: MessageFlags.Ephemeral });
     }
 
     const selectedTeam = interaction.options.getString('team');
@@ -35,119 +35,100 @@ module.exports = {
     const appointee = interaction.options.getUser('appointee');
 
     if (appointee?.bot) {
-      return interaction.reply({ content: '❌ You cannot appoint a bot.', ephemeral: true });
+      return interaction.reply({ content: '❌ You cannot appoint a bot.', flags: MessageFlags.Ephemeral });
     }
 
     try {
-      const teamInfo = await database.getTeamInfo(selectedTeam);
+      const [teamInfo, isStaffElsewhere, existingContract] = await Promise.all([
+        database.getTeamInfo(selectedTeam),
+        appointee ? database.isUserStaffAnywhere(appointee.id) : Promise.resolve(null),
+        appointee ? database.getContractedTeam(appointee.id) : Promise.resolve(null)
+      ]);
+
       if (!teamInfo) {
-        return interaction.reply({ content: '❌ Team not found in database.', ephemeral: true });
+        return interaction.reply({ content: '❌ Team not found in database.', flags: MessageFlags.Ephemeral });
       }
 
-      const currentStaffId = selectedRole === 'manager' ? teamInfo.manager : teamInfo.assistantManager;
-      const globalRoleId = selectedRole === 'manager' ? constants.MANAGER_ROLE_ID : constants.ASSISTANT_MANAGER_ROLE_ID;
+      const isManager = selectedRole === 'manager';
+      const currentStaffId = isManager ? teamInfo.manager : teamInfo.assistantManager;
+      const globalRoleId = isManager ? constants.MANAGER_ROLE_ID : constants.ASSISTANT_MANAGER_ROLE_ID;
+      const roleName = isManager ? 'Manager' : 'Assistant Manager';
       const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam).toUpperCase()}**`;
-      const roleName = selectedRole === 'manager' ? 'Manager' : 'Assistant Manager';
 
       if (!appointee) {
         if (!currentStaffId) {
-          return interaction.reply({
-            content: `❌ The **${roleName}** position for ${formattedTeamName} is already empty.`,
-            ephemeral: true,
-          });
-        }
-
-        const oldMember = await safeFetchMember(interaction.guild, currentStaffId);
-        if (oldMember) {
-          await safeRoleRemove(oldMember, globalRoleId);
-          await safeRoleRemove(oldMember, teamInfo.roleId);
+          return interaction.reply({ content: `❌ The **${roleName}** position for ${formattedTeamName} is already empty.`, flags: MessageFlags.Ephemeral });
         }
 
         await database.appointStaff(selectedTeam, null, selectedRole);
-        return interaction.reply({
-          content: `🧹 The **${roleName}** position for ${formattedTeamName} has been cleared.`,
-          ephemeral: true,
+
+        safeFetchMember(interaction.guild, currentStaffId).then(oldMember => {
+          if (oldMember) {
+            Promise.all([
+              safeRoleRemove(oldMember, globalRoleId),
+              safeRoleRemove(oldMember, teamInfo.roleId)
+            ]).catch(console.warn);
+          }
         });
+
+        return interaction.reply({ content: `🧹 The **${roleName}** position for ${formattedTeamName} has been cleared.`, flags: MessageFlags.Ephemeral });
       }
 
-      if (selectedRole === 'manager' && teamInfo.manager === appointee.id) {
-        return interaction.reply({ content: `❌ <@${appointee.id}> is already the **Manager** of ${formattedTeamName}.`, ephemeral: true });
+      if (teamInfo.manager === appointee.id || teamInfo.assistantManager === appointee.id) {
+        return interaction.reply({ content: `❌ <@${appointee.id}> is already in the management of this team. Demote or clear them first.`, flags: MessageFlags.Ephemeral });
       }
-      if (selectedRole === 'assistant' && teamInfo.assistantManager === appointee.id) {
-        return interaction.reply({ content: `❌ <@${appointee.id}> is already the **Assistant Manager** of ${formattedTeamName}.`, ephemeral: true });
-      }
-      if (selectedRole === 'manager' && teamInfo.assistantManager === appointee.id) {
-        return interaction.reply({ content: `❌ <@${appointee.id}> is currently the Assistant Manager of this team. Demote them first.`, ephemeral: true });
-      }
-      if (selectedRole === 'assistant' && teamInfo.manager === appointee.id) {
-        return interaction.reply({ content: `❌ <@${appointee.id}> is currently the Manager of this team. Demote them first.`, ephemeral: true });
-      }
-
-      const isStaffElsewhere = await database.isUserStaffAnywhere(appointee.id);
       if (isStaffElsewhere) {
-        return interaction.reply({
-          content: `❌ <@${appointee.id}> is already staff for **${isStaffElsewhere.name}**.`,
-          ephemeral: true,
-        });
+        return interaction.reply({ content: `❌ <@${appointee.id}> is already staff for **${isStaffElsewhere.name}**.`, flags: MessageFlags.Ephemeral });
       }
-
-      const existingContract = await database.getContractedTeam(appointee.id);
       if (existingContract) {
-        return interaction.reply({
-          content: `❌ <@${appointee.id}> is a registered player for **${existingContract.teamName}**. Release them first.`,
-          ephemeral: true,
-        });
+        return interaction.reply({ content: `❌ <@${appointee.id}> is a registered player for **${existingContract.teamName}**. Release them first.`, flags: MessageFlags.Ephemeral });
       }
-
-      if (currentStaffId) {
-        const oldMember = await safeFetchMember(interaction.guild, currentStaffId);
-        if (oldMember) {
-          await safeRoleRemove(oldMember, globalRoleId);
-          await safeRoleRemove(oldMember, teamInfo.roleId);
-          console.log(`[appoint.js] Stripped old staff roles from ${currentStaffId}.`);
-        }
-      }
-
-      const targetMember = await interaction.guild.members.fetch(appointee.id);
-      await safeRoleAdd(targetMember, globalRoleId);
-      await safeRoleAdd(targetMember, teamInfo.roleId);
 
       await database.appointStaff(selectedTeam, appointee.id, selectedRole);
-      console.log(`[appoint.js] ${appointee.tag} appointed as ${roleName} for ${selectedTeam}.`);
+      await interaction.editReply({ content: `✅ <@${appointee.id}> has been appointed as **${roleName}** for ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });
 
-      const role = await builderHelpers.getTeamRole(interaction.client, selectedTeam);
-      const embedColor = role ? role.color : constants.DEFAULT_EMBED_COLOR;
+      (async () => {
+        if (currentStaffId) {
+          const oldMember = await safeFetchMember(interaction.guild, currentStaffId);
+          if (oldMember) {
+            await Promise.all([
+              safeRoleRemove(oldMember, globalRoleId),
+              safeRoleRemove(oldMember, teamInfo.roleId)
+            ]);
+            console.log(`[appoint.js] Stripped old staff roles from ${currentStaffId}.`);
+          }
+        }
 
-      const appointEmbed = buildPSLEmbed(interaction.client, embedColor)
-        .setTitle(`${formattedTeamName} OFFICIAL APPOINTMENT`)
-        .setThumbnail(appointee.displayAvatarURL({ dynamic: true }))
-        .addFields({
-          name: 'Staff Appointed',
-          value: `<@${appointee.id}> has been officially appointed as **${roleName}** for ${formattedTeamName}! 📝`,
-        });
+        const targetMember = await safeFetchMember(interaction.guild, appointee.id);
+        if (targetMember) {
+          await Promise.all([
+            safeRoleAdd(targetMember, globalRoleId),
+            safeRoleAdd(targetMember, teamInfo.roleId)
+          ]);
+        }
 
-      try {
-        const appointmentsChannel = await interaction.client.channels.fetch(constants.APPOINTMENTS_CHANNEL_ID);
-        const mentions = [
-          `<@${appointee.id}>`,
-          interaction.user ? `<@${interaction.user.id}>` : null,
-        ].filter(Boolean).join(' ');
-        if (appointmentsChannel) await appointmentsChannel.send({ content: mentions, embeds: [appointEmbed] });
-      } catch (logError) {
-        console.warn('[appoint.js] Could not post to appointments channel:', logError.message);
-      }
+        const role = await builderHelpers.getTeamRole(interaction.client, selectedTeam);
+        const appointEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
+          .setTitle(`${formattedTeamName} OFFICIAL APPOINTMENT`)
+          .setThumbnail(appointee.displayAvatarURL({ dynamic: true }))
+          .addFields({
+            name: 'Staff Appointed',
+            value: `<@${appointee.id}> has been officially appointed as **${roleName}** for ${formattedTeamName}! 📝`,
+          });
 
-      return interaction.reply({ content: `✅ <@${appointee.id}> has been appointed as **${roleName}** for ${formattedTeamName}.`, ephemeral: true });
+        const appointmentsChannel = await interaction.client.channels.fetch(constants.APPOINTMENTS_CHANNEL_ID).catch(() => null);
+        if (appointmentsChannel) {
+          const mentions = [ `<@${appointee.id}>`, interaction.user ? `<@${interaction.user.id}>` : null ].filter(Boolean).join(' ');
+          appointmentsChannel.send({ content: mentions, embeds: [appointEmbed] }).catch(console.warn);
+        }
+      })();
+
     } catch (error) {
       console.error('❌ Critical error in /appoint:', error);
-      if (interaction.replied || interaction.deferred) return;
-      if (error.code === 50013) {
-        return interaction.reply({
-          content: '❌ **Hierarchy Error:** Move the bot\'s role higher in Server Settings.',
-          ephemeral: true,
-        });
+      if (error.code === 50013 && !interaction.replied) {
+        return interaction.reply({ content: '❌ **Hierarchy Error:** Move the bot\'s role higher in Server Settings.', flags: MessageFlags.Ephemeral });
       }
-      return interaction.reply({ content: '❌ An error occurred during appointment.', ephemeral: true });
+      if (!interaction.replied) interaction.reply({ content: '❌ An error occurred during appointment.', flags: MessageFlags.Ephemeral });
     }
   },
 };

@@ -3,6 +3,7 @@ const Team = require('./models/Team');
 const Config = require('./models/Config');
 const PlayerHistory = require('./models/PlayerHistory');
 const configTeams = require('../config/teams');
+const { logError } = require('../utils/errorHandler');
 
 module.exports = {
   // ── Contracts ─────────────────────────────────────────────
@@ -103,7 +104,7 @@ module.exports = {
       await Team.insertMany(teamsToCreate);
       console.log('✅ [Seed] All 24 national teams registered.');
     } catch (error) {
-      console.error('❌ [Seed] Error seeding database:', error);
+      logError(error, { context: 'DB_SEEDING' });
     }
   },
 };

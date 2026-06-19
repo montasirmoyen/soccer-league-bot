@@ -1,6 +1,7 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { managers } = require('../config/managers');
-const { SCOUT_CHANNEL_ID } = require('../config/constants');
+const { SlashCommandBuilder } = require('discord.js');
+const database = require('../db/database');
+const constants = require('../config/constants');
+const { buildPSLEmbed } = require('../utils/embedHelpers');
 
 const cooldowns = new Map();
 
@@ -8,8 +9,9 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('scout')
     .setDescription('Scout for players in a specific position')
-    .addStringOption(option =>
-      option.setName('position')
+    .addStringOption((option) =>
+      option
+        .setName('position')
         .setDescription('Position you are scouting for')
         .setRequired(true)
         .addChoices(
@@ -29,8 +31,9 @@ module.exports = {
           { name: 'ST', value: 'ST' }
         )
     )
-    .addStringOption(option =>
-      option.setName('message')
+    .addStringOption((option) =>
+      option
+        .setName('message')
         .setDescription('Your scouting message')
         .setRequired(true)
         .setMaxLength(1000)
@@ -41,62 +44,66 @@ module.exports = {
     const position = interaction.options.getString('position');
     const message = interaction.options.getString('message');
 
-    const teamData = managers[user];
+    console.log(`\n🔍 [scout.js] Scout posted by ${interaction.user.tag}`);
 
-    if (!teamData) {
-      return interaction.reply({ content: '❌ You are not an authorized manager.', ephemeral: true });
-    }
+    try {
+      const staffRecord = await database.isUserStaffAnywhere(user);
+      if (!staffRecord) {
+        return interaction.editReply({ content: '❌ You are not an authorized manager.', ephemeral: true });
+      }
 
-    const cooldownAmount = 3 * 60 * 60 * 1000;
-    const now = Date.now();
+      const cooldownAmount = 3 * 60 * 60 * 1000;
+      const now = Date.now();
 
-    if (cooldowns.has(user)) {
-      const expirationTime = cooldowns.get(user) + cooldownAmount;
+      if (cooldowns.has(user)) {
+        const expirationTime = cooldowns.get(user) + cooldownAmount;
 
-      if (now < expirationTime) {
-        const timeLeft = (expirationTime - now) / 1000;
-        const hours = Math.floor(timeLeft / 3600);
-        const minutes = Math.floor((timeLeft % 3600) / 60);
+        if (now < expirationTime) {
+          const timeLeft = (expirationTime - now) / 1000;
+          const hours = Math.floor(timeLeft / 3600);
+          const minutes = Math.floor((timeLeft % 3600) / 60);
 
-        return interaction.reply({
-          content: `⏰ You're on cooldown! You can scout again in ${hours}h ${minutes}m.`,
-          ephemeral: true
+          return interaction.editReply({
+            content: `⏰ You're on cooldown! You can scout again in ${hours}h ${minutes}m.`,
+            ephemeral: true,
+          });
+        }
+      }
+
+      cooldowns.set(user, now);
+      setTimeout(() => {
+        cooldowns.delete(user);
+      }, cooldownAmount);
+
+      const embed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
+        .setTitle('🔍 Player Scout')
+        .setDescription(
+          `**${staffRecord.name}** is scouting for players!\n\n` +
+          `📌 **Position**: ${position}\n\n` +
+          `💬 **Message**:\n${message}\n\n` +
+          `*If you're interested and available, feel free to DM <@${user}>!*`
+        )
+        .setAuthor({
+          name: interaction.user.displayName,
+          iconURL: interaction.user.displayAvatarURL(),
+        });
+
+      const targetChannel = await interaction.client.channels.fetch(constants.SCOUT_CHANNEL_ID);
+      if (targetChannel) {
+        await targetChannel.send({ embeds: [embed] });
+        await interaction.editReply({
+          content: '✅ Your scouting message has been posted!',
+          ephemeral: true,
+        });
+      } else {
+        await interaction.editReply({
+          content: '⚠️ Could not find the scouting channel.',
+          ephemeral: true,
         });
       }
+    } catch (error) {
+      console.error('❌ Error in /scout:', error);
+      return interaction.editReply({ content: '❌ An error occurred while posting your scout.', ephemeral: true });
     }
-
-    cooldowns.set(user, now);
-
-    setTimeout(() => {
-      cooldowns.delete(user);
-    }, cooldownAmount);
-
-    const embed = new EmbedBuilder()
-      .setAuthor({
-        name: interaction.user.displayName,
-        iconURL: interaction.user.displayAvatarURL()
-      })
-      .setTitle('🔍 Player Scout')
-      .setColor(0x57F287)
-      .addFields(
-        { name: '🏆 Team', value: teamData.team, inline: true },
-        { name: '📌 Position', value: position, inline: true },
-        { name: '​', value: '​', inline: true },
-        { name: '💬 Message', value: message, inline: false },
-        { name: '📩 Contact', value: `DM <@${user}> if you're interested!`, inline: false }
-      )
-      .setFooter({
-        text: 'PSL · Pure Soccer League',
-        iconURL: 'https://media.discordapp.net/attachments/1480765412651307200/1480765442946629632/PSL_LOGO_WHITE.png?ex=69b0ddc8&is=69af8c48&hm=cc39c00742d3a79f6951870d01481a4d125e94e3dd4abeb3069c6c0ef11a3005&=&format=webp&quality=lossless&width=700&height=700'
-      })
-      .setTimestamp();
-
-    const targetChannel = interaction.client.channels.cache.get(SCOUT_CHANNEL_ID);
-    if (targetChannel) {
-      await targetChannel.send({ embeds: [embed] });
-      await interaction.reply({ content: '✅ Your scouting message has been posted!', ephemeral: true });
-    } else {
-      await interaction.reply({ content: '⚠️ Could not find the scouting channel.', ephemeral: true });
-    }
-  }
+  },
 };

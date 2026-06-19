@@ -1,89 +1,77 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { managers, enabled } = require('../config/managers');
-const db = require('../db/database');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
+const database = require('../db/database');
+const constants = require('../config/constants');
+const builderHelpers = require('../utils/builderHelpers');
+const { buildPSLEmbed } = require('../utils/embedHelpers');
+const { canManageTeam } = require('../utils/validations');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('contract')
-    .setDescription('Send a contract to a player')
-    .addUserOption(option => 
-      option.setName('signee')
-        .setDescription('User to send the contract to')
-        .setRequired(true)
+    .setDescription('Sends a contract offer to a player\'s DM.')
+    .addStringOption((option) =>
+      option.setName('team').setDescription('Select your national team').setRequired(true)
+        .addChoices(builderHelpers.getTeamChoices())
+    )
+    .addUserOption((option) =>
+      option.setName('signee').setDescription('Player to offer the contract').setRequired(true)
     ),
 
   async execute(interaction) {
-    const sender = interaction.user.id;
-    const signee = interaction.options.getUser('signee');
+    const selectedTeam = interaction.options.getString('team');
+    const targetUser = interaction.options.getUser('signee');
 
-    if (!enabled) {
-      return interaction.reply({ content: '⚠️ The transfer window is currently closed.', ephemeral: true });
-    }
-
-    if (!managers[sender]) {
-      return interaction.reply({ content: '❌ You are not an authorized manager.', ephemeral: true });
-    }
-
-    if (!managers[sender].canContract) {
-      return interaction.reply({ content: '⚠️ You are not authorized to make contracts during this transfer window.', ephemeral: true });
-    }
-
-    if (managers[signee.id]) {
-      return interaction.reply({ content: '❌ You cannot contract another manager.', ephemeral: true });
-    }
-
-    if (signee.id === sender) {
-      return interaction.reply({ content: '❌ You cannot contract yourself.', ephemeral: true });
-    }
-
-    if (signee.bot) {
-      return interaction.reply({ content: '❌ You cannot contract bots.', ephemeral: true });
+    if (targetUser.bot) {
+      return interaction.editReply({ content: '❌ You cannot send a contract to a bot.', flags: MessageFlags.Ephemeral });
     }
 
     try {
-      const row = await db.getContractedTeam(signee.id);
+      const [isWindowOpen, teamInfo, isStaffSomewhere, activeContract, currentSquad] = await Promise.all([
+        database.getTransferWindowState(),
+        database.getTeamInfo(selectedTeam),
+        database.isUserStaffAnywhere(targetUser.id),
+        database.getContractedTeam(targetUser.id),
+        database.getPlayersByTeam(selectedTeam)
+      ]);
 
-      if (row) {
-        return interaction.reply({ content: `❌ <@${signee.id}> is already contracted to **${row.teamName}**`, ephemeral: true });
+      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam).toUpperCase()}**`;
+
+      if (!isWindowOpen) {
+        return interaction.editReply({ content: '🔒 The transfer window is currently **CLOSED**. Offers cannot be sent.', flags: MessageFlags.Ephemeral });
+      }
+      if (!canManageTeam(interaction.member, teamInfo)) {
+        return interaction.editReply({ content: `❌ You do not have permission to offer contracts for ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });
+      }
+      if (isStaffSomewhere) {
+        return interaction.editReply({ content: `❌ <@${targetUser.id}> is management staff for **${isStaffSomewhere.name}** and cannot sign as a player.`, flags: MessageFlags.Ephemeral });
+      }
+      if (activeContract) {
+        return interaction.editReply({ content: `❌ <@${targetUser.id}> already has a contract with **${builderHelpers.getFormattedTeamName(activeContract.teamName).toUpperCase()}**.`, flags: MessageFlags.Ephemeral });
+      }
+      if (currentSquad.length >= constants.MAX_ROSTER_SIZE) {
+        return interaction.editReply({ content: `❌ **Roster limit reached!** ${formattedTeamName} already has ${constants.MAX_ROSTER_SIZE} registered players.`, flags: MessageFlags.Ephemeral });
       }
 
-      const teamData = managers[sender];
+      const role = await builderHelpers.getTeamRole(interaction.client, selectedTeam);
+      const contractEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
+        .setTitle('📜 NEW CONTRACT OFFER!')
+        .setDescription(`Hello, <@${targetUser.id}>,\n${formattedTeamName} has officially offered you a contract for this season.\n\nReview and make your choice below:`);
 
-      const embed = new EmbedBuilder()
-        .setAuthor({
-          name: interaction.user.displayName || interaction.user.username,
-          iconURL: interaction.user.displayAvatarURL()
-        })
-        .setTitle('📑 PSL Contract')
-        .setColor(0x5865F2)
-        .setDescription(`<@${signee.id}>, you have received a contract offer. Review the details below and accept or decline.`)
-        .addFields(
-          { name: '🏆 Team', value: teamData.team, inline: true },
-          { name: '🖊️ Signed By', value: `<@${sender}>`, inline: true },
-          { name: '​', value: '​', inline: true },
-          { name: '⚠️ Note', value: 'Once accepted, you cannot join another team until released.', inline: false }
-        )
-        .setFooter({
-          text: 'PSL · Pure Soccer League',
-          iconURL: 'https://media.discordapp.net/attachments/1480765412651307200/1480765442946629632/PSL_LOGO_WHITE.png?ex=69b0ddc8&is=69af8c48&hm=cc39c00742d3a79f6951870d01481a4d125e94e3dd4abeb3069c6c0ef11a3005&=&format=webp&quality=lossless&width=700&height=700'
-        })
-        .setTimestamp();
-
-      const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`accept_${sender}_${teamData.team}_${signee.id}`)
-          .setLabel('Accept')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`decline_${sender}_${teamData.team}_${signee.id}`)
-          .setLabel('Decline')
-          .setStyle(ButtonStyle.Danger)
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`accept_${selectedTeam}_${targetUser.id}_${interaction.user.id}`).setLabel('🤝 Accept Contract').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`refuse_${selectedTeam}_${targetUser.id}_${interaction.user.id}`).setLabel('❌ Refuse').setStyle(ButtonStyle.Danger)
       );
 
-      await interaction.reply({ content: `<@${signee.id}> Pending your decision!`, embeds: [embed], components: [buttons] });
-    } catch (err) {
-      console.error('Database error:', err);
-      return interaction.reply({ content: '⚠️ Database error occurred.', ephemeral: true });
+      await targetUser.send({ embeds: [contractEmbed], components: [row] });
+
+      return interaction.editReply({ content: `📨 Contract offer sent to <@${targetUser.id}>'s DM for ${formattedTeamName}!`, flags: MessageFlags.Ephemeral });
+      
+    } catch (error) {
+      if (error.code === 50007) {
+        return interaction.editReply({ content: `❌ Could not send the offer. <@${targetUser.id}> likely has DMs closed.`, flags: MessageFlags.Ephemeral });
+      }
+      console.error('❌ Error in /contract:', error);
+      return interaction.editReply({ content: '❌ An error occurred while processing the contract offer.', flags: MessageFlags.Ephemeral });
     }
-  }
+  },
 };

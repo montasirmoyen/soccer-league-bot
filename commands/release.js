@@ -1,56 +1,86 @@
-const { SlashCommandBuilder } = require('discord.js');
-const { managers } = require('../config/managers');
-const { RELEASE_CHANNEL_ID } = require('../config/constants');
-const db = require('../db/database');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
+const database = require('../db/database');
+const constants = require('../config/constants');
+const builderHelpers = require('../utils/builderHelpers');
+const { buildPSLEmbed } = require('../utils/embedHelpers');
+const { canManageTeam } = require('../utils/validations');
+const { safeRoleRemove, safeFetchMember } = require('../utils/discordHelpers');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('release')
-    .setDescription('Release a player from your team')
-    .addUserOption(option => option.setName('releasee').setDescription('User to release').setRequired(true)),
+    .setDescription('Releases a player from their national team contract.')
+    .addUserOption((option) =>
+      option.setName('player').setDescription('Player to release').setRequired(true)
+    ),
 
   async execute(interaction) {
-    const releasee = interaction.options.getUser('releasee');
-    const senderId = interaction.user.id;
+    const targetUser = interaction.options.getUser('player');
 
-    if (!managers[senderId]) {
-      return interaction.reply({ content: '❌ You are not an authorized manager.', ephemeral: true });
+    if (targetUser.bot) {
+      return interaction.editReply({ content: '❌ Bots do not have contracts.', flags: MessageFlags.Ephemeral });
     }
-
-    if (managers[releasee.id]) {
-      return interaction.reply({ content: '❌ You cannot release another manager.', ephemeral: true });
-    }
-
-    if (releasee.id === senderId) {
-      return interaction.reply({ content: '❌ You cannot release yourself.', ephemeral: true });
-    }
-
-    if (releasee.bot) {
-      return interaction.reply({ content: '❌ You cannot release bots.', ephemeral: true });
-    }
-
-    const senderTeam = managers[senderId].team;
 
     try {
-      const contract = await db.getContractedTeam(releasee.id);
+      const [isWindowOpen, activeContract] = await Promise.all([
+        database.getTransferWindowState(),
+        database.getContractedTeam(targetUser.id)
+      ]);
 
-      if (!contract) {
-        return interaction.reply({ content: `❌ <@${releasee.id}> is not contracted to any team.`, ephemeral: true });
+      if (!isWindowOpen) {
+        return interaction.editReply({ content: '🔒 The transfer window is **CLOSED**. Players cannot be released right now.', flags: MessageFlags.Ephemeral });
+      }
+      if (!activeContract) {
+        return interaction.editReply({ content: `❌ <@${targetUser.id}> is already a **Free Agent**.`, flags: MessageFlags.Ephemeral });
       }
 
-      if (contract.teamName !== senderTeam) {
-        return interaction.reply({ content: `❌ You can only release players contracted to your own team (${senderTeam}).`, ephemeral: true });
+      const playerTeam = activeContract.teamName;
+      const teamInfo = await database.getTeamInfo(playerTeam);
+      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(playerTeam).toUpperCase()}**`;
+
+      if (!canManageTeam(interaction.member, teamInfo)) {
+        return interaction.editReply({ content: `❌ You do not have permission to release players from ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });
       }
 
-      await db.releasePlayer(releasee.id);
+      await database.releasePlayer(targetUser.id);
+      
+      interaction.editReply({ content: `✅ <@${targetUser.id}> has been released from ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });
 
-      const releaseChannel = await interaction.client.channels.fetch(RELEASE_CHANNEL_ID);
-      await releaseChannel.send(`🔔 | **<@${releasee.id}>** has been released from **${contract.teamName}**`);
+      (async () => {
+        const targetMember = await safeFetchMember(interaction.guild, targetUser.id);
+        if (targetMember && teamInfo?.roleId) {
+          safeRoleRemove(targetMember, teamInfo.roleId).catch(console.warn);
+        }
 
-      await interaction.reply({ content: `✅ <@${releasee.id}> released from **${contract.teamName}**`, ephemeral: true });
+        const releaseChannel = await interaction.client.channels.fetch(constants.RELEASES_CHANNEL_ID).catch(() => null);
+        if (releaseChannel) {
+          const [teamManager, teamAssistant, teamCapacity, role] = await Promise.all([
+            database.getTeamStaff(playerTeam, 'manager'),
+            database.getTeamStaff(playerTeam, 'assistantManager'),
+            builderHelpers.getDisplayedPlayersAmount(playerTeam),
+            builderHelpers.getTeamRole(interaction.client, playerTeam)
+          ]);
+
+          const releaseEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
+            .setTitle(`${formattedTeamName} OFFICIAL RELEASE`)
+            .addFields(
+              { name: 'Player Released', value: `<@${targetUser.id}> has been released from ${formattedTeamName} and is now a Free Agent! 📝` },
+              { name: 'Team Capacity', value: teamCapacity }
+            );
+
+          const mentions = [
+            `<@${targetUser.id}>`,
+            teamManager?.manager ? `<@${teamManager.manager}>` : null,
+            teamAssistant?.assistantManager ? `<@${teamAssistant.assistantManager}>` : null,
+          ].filter(Boolean).join(' ');
+
+          releaseChannel.send({ content: mentions, embeds: [releaseEmbed] }).catch(console.warn);
+        }
+      })();
+
     } catch (error) {
-      console.error('Release command error:', error);
-      return interaction.reply({ content: '⚠️ Something went wrong. Please try again later.', ephemeral: true });
+      console.error('❌ Error in /release:', error);
+      if (!interaction.replied) interaction.editReply({ content: '❌ An error occurred during release.', ephemeral: true });
     }
-  }
+  },
 };

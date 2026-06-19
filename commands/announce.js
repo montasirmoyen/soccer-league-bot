@@ -1,15 +1,11 @@
 const {
   SlashCommandBuilder,
-  EmbedBuilder,
-  PermissionsBitField,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
-  Events
 } = require('discord.js');
-
-const { CHAIRMAN_ROLE_ID } = require('../config/constants');
+const { isChairman } = require('../utils/validations');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -17,33 +13,31 @@ module.exports = {
     .setDescription('Open a modal to make a detailed announcement'),
 
   async execute(interaction) {
-    const member = interaction.member;
-    const guild = interaction.guild;
+    console.log(`\n📢 [announce.js] Announcement modal triggered by ${interaction.user.tag}`);
 
-    const requiredRole = guild.roles.cache.get(CHAIRMAN_ROLE_ID);
-    if (!requiredRole) {
-      return interaction.reply({ content: '❌ Role restriction is misconfigured. Contact an admin.', ephemeral: true });
+    if (!isChairman(interaction.member)) {
+      return interaction.editReply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
     }
 
-    const hasPermission = member.roles.cache.has(CHAIRMAN_ROLE_ID);
-    if (!hasPermission) {
-      return interaction.reply({ content: '🚫 You do not have permission to use this command.', ephemeral: true });
+    try {
+      const modal = new ModalBuilder()
+        .setCustomId('announceModal')
+        .setTitle('New Announcement');
+
+      const messageInput = new TextInputBuilder()
+        .setCustomId('announcementInput')
+        .setLabel('Paste your full announcement')
+        .setStyle(TextInputStyle.Paragraph)
+        .setMaxLength(4000)
+        .setRequired(true);
+
+      const row = new ActionRowBuilder().addComponents(messageInput);
+      modal.addComponents(row);
+
+      await interaction.showModal(modal);
+    } catch (error) {
+      console.error('❌ Error in /announce:', error);
+      return interaction.editReply({ content: '❌ An error occurred while opening the announcement modal.', ephemeral: true });
     }
-
-    const modal = new ModalBuilder()
-      .setCustomId('announceModal')
-      .setTitle('New Announcement');
-
-    const messageInput = new TextInputBuilder()
-      .setCustomId('announcementInput')
-      .setLabel('Paste your full announcement')
-      .setStyle(TextInputStyle.Paragraph)
-      .setMaxLength(4000)
-      .setRequired(true);
-
-    const row = new ActionRowBuilder().addComponents(messageInput);
-    modal.addComponents(row);
-
-    await interaction.showModal(modal);
-  }
+  },
 };

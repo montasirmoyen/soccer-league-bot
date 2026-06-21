@@ -12,7 +12,7 @@ const errorHandler = require('./utils/errorHandler');
 const { buildPSLEmbed } = require('./utils/embedHelpers');
 const { safeRoleAdd } = require('./utils/discordHelpers');
 const { logError, replyWithError } = require('./utils/errorHandler');
-const { registerverifierHandler } = require('./handlers/verifier-handler');
+const { registerverifierHandler } = require('./handlers/verifierHandler');
 
 class UserFacingError extends Error {
   constructor(message) {

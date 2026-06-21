@@ -12,6 +12,7 @@ const errorHandler = require('./utils/errorHandler');
 const { buildPSLEmbed } = require('./utils/embedHelpers');
 const { safeRoleAdd } = require('./utils/discordHelpers');
 const { logError, replyWithError } = require('./utils/errorHandler');
+const { registerverifierHandler } = require('./handlers/verifier-handler');
 
 class UserFacingError extends Error {
   constructor(message) {
@@ -208,6 +209,8 @@ async function bootstrap() {
 
   const commands = loadCommands(client);
   await registerCommands(commands);
+
+  registerverifierHandler(client);
 
   setInterval(cleanupExpiredEntries, TIMERS.CLEANUP_INTERVAL_MS).unref();
 

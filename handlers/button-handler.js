@@ -14,7 +14,7 @@ async function handleEmergencyButton(interaction, customIdParts) {
     if (emergencyAction === 'accept') {
       const existingContract = await database.getContractedTeam(member.id);
       if (existingContract) {
-        console.log(`[buttonHandler.js] Emergency signing: ${member.id} moved from ${existingContract.teamName} to ${teamName}`);
+        console.log(`[button-handler.js] Emergency signing: ${member.id} moved from ${existingContract.teamName} to ${teamName}`);
       }
 
       await database.contractPlayer(member.id, teamName);
@@ -38,7 +38,7 @@ async function handleEmergencyButton(interaction, customIdParts) {
       });
     }
   } catch (error) {
-    console.error('[buttonHandler.js] Error in emergency button:', error);
+    console.error('[button-handler.js] Error in emergency button:', error);
     return interaction.update({
       content: '❌ An error occurred processing your response.',
       components: [],
@@ -88,7 +88,7 @@ async function handleContractButton(interaction, customIdParts) {
       });
     }
   } catch (error) {
-    console.error('[buttonHandler.js] Error in contract button:', error);
+    console.error('[button-handler.js] Error in contract button:', error);
     return interaction.update({
       content: '❌ An error occurred processing your response.',
       components: [],
@@ -98,7 +98,7 @@ async function handleContractButton(interaction, customIdParts) {
 }
 
 async function handleButton(interaction) {
-  console.log(`\n🔘 [buttonHandler.js] Button clicked by ${interaction.user.tag}: ${interaction.customId}`);
+  console.log(`\n🔘 [button-handler.js] Button clicked by ${interaction.user.tag}: ${interaction.customId}`);
 
   try {
     const customIdParts = interaction.customId.split('_');
@@ -111,9 +111,9 @@ async function handleButton(interaction) {
       return handleContractButton(interaction, customIdParts);
     }
 
-    console.warn(`[buttonHandler.js] Unknown button type: ${customIdParts[0]}`);
+    console.warn(`[button-handler.js] Unknown button type: ${customIdParts[0]}`);
   } catch (error) {
-    console.error('[buttonHandler.js] Error in handleButton:', error);
+    console.error('[button-handler.js] Error in handleButton:', error);
   }
 }
 

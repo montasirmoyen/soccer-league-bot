@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const constants = require('../config/constants');
-const { buildPSLEmbed } = require('../utils/embedHelpers');
+const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 const {
   SCRIM_HOSTER_ROLE_ID,

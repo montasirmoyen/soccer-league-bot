@@ -1,6 +1,6 @@
 const constants = require('../config/constants');
 const { isChairman } = require('../utils/validations');
-const { buildPSLEmbed } = require('../utils/embedHelpers');
+const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 async function handleAnnounceModal(interaction, emojiMap) {
   console.log(`\n📣 [modalHandler.js] Announcement modal submitted by ${interaction.user.tag}`);

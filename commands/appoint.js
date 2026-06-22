@@ -1,10 +1,10 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
-const builderHelpers = require('../utils/builderHelpers');
-const { buildPSLEmbed } = require('../utils/embedHelpers');
-const { isChairman } = require('../utils/validations');
-const { safeRoleAdd, safeRoleRemove, safeFetchMember } = require('../utils/discordHelpers');
+const builderHelpers = require('../utils/builder-helpers');
+const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { safeRoleAdd, safeRoleRemove, safeFetchMember } = require('../utils/discord-helpers');
+const { canManageTeam, isChairman, isTeamManager } = require('../utils/validations');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -26,34 +26,42 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    if (!isChairman(interaction.member)) {
-      return interaction.editReply({ content: '❌ Only Chairmen can use this command.', flags: MessageFlags.Ephemeral });
-    }
-
     const selectedTeam = interaction.options.getString('team');
     const selectedRole = interaction.options.getString('role');
     const appointee = interaction.options.getUser('appointee');
+
+    const teamInfo = await database.getTeamInfo(selectedTeam);
+    if (!teamInfo) {
+      return interaction.editReply({ content: '❌ Team not found.', flags: MessageFlags.Ephemeral });
+    }
+
+    const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam).toUpperCase()}**`;
+
+    if (!canManageTeam(interaction.member, teamInfo)) {
+      return interaction.editReply({ content: `❌ Unauthorized.`, flags: MessageFlags.Ephemeral });
+    }
 
     if (appointee?.bot) {
       return interaction.editReply({ content: '❌ You cannot appoint a bot.', flags: MessageFlags.Ephemeral });
     }
 
+    const isAssistantAppointment = selectedRole === 'assistant';
+    const isManager = interaction.user.id === teamInfo.manager;
+
+    if (!isChairman && isManager && !isAssistantAppointment) {
+      return interaction.editReply({ content: '❌ Managers can only appoint Assistant Managers.', flags: MessageFlags.Ephemeral });
+    }
+
     try {
-      const [teamInfo, isStaffElsewhere, existingContract] = await Promise.all([
-        database.getTeamInfo(selectedTeam),
+      const [isStaffElsewhere, existingContract] = await Promise.all([
         appointee ? database.isUserStaffAnywhere(appointee.id) : Promise.resolve(null),
         appointee ? database.getContractedTeam(appointee.id) : Promise.resolve(null)
       ]);
 
-      if (!teamInfo) {
-        return interaction.editReply({ content: '❌ Team not found in database.', flags: MessageFlags.Ephemeral });
-      }
-
-      const isManager = selectedRole === 'manager';
-      const currentStaffId = isManager ? teamInfo.manager : teamInfo.assistantManager;
-      const globalRoleId = isManager ? constants.MANAGER_ROLE_ID : constants.ASSISTANT_MANAGER_ROLE_ID;
-      const roleName = isManager ? 'Manager' : 'Assistant Manager';
-      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam).toUpperCase()}**`;
+      const isRoleManager = selectedRole === 'manager';
+      const currentStaffId = isRoleManager ? teamInfo.manager : teamInfo.assistantManager;
+      const globalRoleId = isRoleManager ? constants.MANAGER_ROLE_ID : constants.ASSISTANT_MANAGER_ROLE_ID;
+      const roleName = isRoleManager ? 'Manager' : 'Assistant Manager';
 
       if (!appointee) {
         if (!currentStaffId) {
@@ -74,18 +82,25 @@ module.exports = {
         return interaction.editReply({ content: `🧹 The **${roleName}** position for ${formattedTeamName} has been cleared.`, flags: MessageFlags.Ephemeral });
       }
 
-      if (teamInfo.manager === appointee.id || teamInfo.assistantManager === appointee.id) {
-        return interaction.editReply({ content: `❌ <@${appointee.id}> is already in the management of this team. Demote or clear them first.`, flags: MessageFlags.Ephemeral });
-      }
-      if (isStaffElsewhere) {
-        return interaction.editReply({ content: `❌ <@${appointee.id}> is already staff for **${isStaffElsewhere.name}**.`, flags: MessageFlags.Ephemeral });
-      }
-      if (existingContract) {
-        return interaction.editReply({ content: `❌ <@${appointee.id}> is a registered player for **${existingContract.teamName}**. Release them first.`, flags: MessageFlags.Ephemeral });
+      const appointeeId = appointee.id
+      if (isTeamManager(teamInfo, appointeeId) && selectedRole != 'assistant') {
+        return interaction.editReply({ content: '❌ Manager can only appoint his **Assistant Manager.**', flags: MessageFlags.Ephemeral })
       }
 
-      await database.appointStaff(selectedTeam, appointee.id, selectedRole);
-      await interaction.editReply({ content: `✅ <@${appointee.id}> has been appointed as **${roleName}** for ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });
+      if (teamInfo.manager === appointeeId || teamInfo.assistantManager === appointeeId) {
+        return interaction.editReply({ content: `❌ <@${appointeeId}> is already in the management of this team. Demote or clear them first.`, flags: MessageFlags.Ephemeral });
+      }
+      if (isStaffElsewhere) {
+        return interaction.editReply({ content: `❌ <@${appointeeId}> is already staff for **${isStaffElsewhere.name}**.`, flags: MessageFlags.Ephemeral });
+      }
+      if (existingContract && existingContract.teamName != selectedTeam) {
+        const formattedOtherTeamName = builderHelpers.getFormattedTeamName(existingContract.teamName)
+        return interaction.editReply({ content: `❌ <@${appointeeId}> is a registered player for ${formattedOtherTeamName}.`, flags: MessageFlags.Ephemeral });
+      }
+
+      await database.appointStaff(selectedTeam, appointeeId, selectedRole);
+      if (await database.getContractedTeam(appointeeId) != selectedTeam) await database.contractPlayer(appointeeId, selectedTeam);
+      await interaction.editReply({ content: `✅ <@${appointeeId}> has been appointed as **${roleName}** for ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });
 
       (async () => {
         if (currentStaffId) {
@@ -99,7 +114,7 @@ module.exports = {
           }
         }
 
-        const targetMember = await safeFetchMember(interaction.guild, appointee.id);
+        const targetMember = await safeFetchMember(interaction.guild, appointeeId);
         if (targetMember) {
           await Promise.all([
             safeRoleAdd(targetMember, globalRoleId),
@@ -113,12 +128,12 @@ module.exports = {
           .setThumbnail(appointee.displayAvatarURL({ dynamic: true }))
           .addFields({
             name: 'Staff Appointed',
-            value: `<@${appointee.id}> has been officially appointed as **${roleName}** for ${formattedTeamName}! 📝`,
+            value: `<@${appointeeId}> has been officially appointed as **${roleName}** for ${formattedTeamName}! 📝`,
           });
 
         const appointmentsChannel = await interaction.client.channels.fetch(constants.APPOINTMENTS_CHANNEL_ID).catch(() => null);
         if (appointmentsChannel) {
-          const mentions = [ `<@${appointee.id}>`, interaction.user ? `<@${interaction.user.id}>` : null ].filter(Boolean).join(' ');
+          const mentions = [`<@${appointeeId}>`, interaction.user ? `<@${interaction.user.id}>` : null].filter(Boolean).join(' ');
           appointmentsChannel.send({ content: mentions, embeds: [appointEmbed] }).catch(console.warn);
         }
       })();

@@ -1,10 +1,10 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
-const builderHelpers = require('../utils/builderHelpers');
-const { buildPSLEmbed } = require('../utils/embedHelpers');
+const builderHelpers = require('../utils/builder-helpers');
+const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { safeRoleRemove, safeFetchMember } = require('../utils/discord-helpers');
 const { canManageTeam } = require('../utils/validations');
-const { safeRoleRemove, safeFetchMember } = require('../utils/discordHelpers');
 
 module.exports = {
   data: new SlashCommandBuilder()

@@ -4,7 +4,9 @@ const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { safeRoleRemove } = require('../utils/discord-helpers');
-const { isTeamStaff } = require('../utils/validations');
+const { isTeamStaff, validateGuild } = require('../utils/validations');
+
+const cooldowns = new Map();
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -12,6 +14,10 @@ module.exports = {
     .setDescription(`Voluntarily leave your team contract (Limit: ${constants.MAX_DEMANDS_PER_SEASON} per season).`),
 
   async execute(interaction) {
+    if (!validateGuild(interaction)) {
+      return interaction.editReply({ content: '❌ You can only execute this command in the official server.', flags: MessageFlags.Ephemeral });
+    }
+
     const userId = interaction.user.id;
 
     try {
@@ -33,9 +39,29 @@ module.exports = {
         return interaction.editReply({ content: `❌ **Seasonal limit reached!** You have used all ${constants.MAX_DEMANDS_PER_SEASON} demands this season.`, flags: MessageFlags.Ephemeral });
       }
 
+      const cooldownAmount = 3 * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+
+      if (cooldowns.has(userId)) {
+        const expirationTime = cooldowns.get(userId) + cooldownAmount;
+
+        if (now < expirationTime) {
+          const timeLeft = (expirationTime - now) / 1000;
+          const hours = Math.floor(timeLeft / 3600);
+          const minutes = Math.floor((timeLeft % 3600) / 60);
+
+          return interaction.editReply({
+            content: `⏰ You are on cooldown! Please try again in **${hours}**h **${minutes}**m.`
+          });
+        }
+      }
+
+      cooldowns.set(userId, now);
+      setTimeout(() => cooldowns.delete(userId), cooldownAmount);
+
       await database.releasePlayer(userId);
       const updatedHistory = await database.incrementPlayerDemand(userId);
-      
+
       const remainingDemands = constants.MAX_DEMANDS_PER_SEASON - updatedHistory.demandsUsed;
       const formattedTeamName = `**${playerTeam.toUpperCase()}**`;
 
@@ -54,7 +80,7 @@ module.exports = {
             database.getTeamStaff(playerTeam, 'assistantManager')
           ]);
 
-          const demandEmbed = buildPSLEmbed(interaction.client, constants.DEMAND_COLOR)
+          const demandEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
             .setTitle(`${formattedTeamName} OFFICIAL DEMAND`)
             .addFields(
               { name: 'Player Demanded Release', value: `<@${userId}> has voluntarily left ${formattedTeamName} and is now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_SEASON})` },

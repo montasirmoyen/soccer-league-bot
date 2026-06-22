@@ -3,12 +3,12 @@ const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
-const { canManageTeam } = require('../utils/validations');
+const { canManageTeam, validateGuild } = require('../utils/validations');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('emergencysign')
-    .setDescription(`Emergency signing while window is CLOSED (Limit: ${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}/team).`)
+    .setName('emergency-sign')
+    .setDescription(`Emergency signing while window is CLOSED (Limit: ${constants.MAX_EMERGENCY_SIGNS_PER_TEAM} per team).`)
     .addStringOption((option) =>
       option.setName('team').setDescription('Select the national team').setRequired(true)
         .addChoices(builderHelpers.getTeamChoices())
@@ -18,6 +18,10 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    if (!validateGuild(interaction)) {
+      return interaction.editReply({ content: '❌ You can only execute this command in the official server.', flags: MessageFlags.Ephemeral });
+    }
+
     const selectedTeam = interaction.options.getString('team');
     const targetUser = interaction.options.getUser('player');
 

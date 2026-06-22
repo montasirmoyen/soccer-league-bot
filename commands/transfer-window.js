@@ -1,20 +1,24 @@
 const { SlashCommandBuilder } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
-const { isChairman } = require('../utils/validations');
+const { isChairman, validateGuild } = require('../utils/validations');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 const WINDOW_EMBED_TITLE = '⚽ TRANSFER WINDOW STATUS UPDATE';
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('transferwindow')
+    .setName('transfer-window')
     .setDescription('Opens or closes the league transfer window.')
     .addBooleanOption((option) =>
       option.setName('status').setDescription('True = Open, False = Closed').setRequired(true)
     ),
     
   async execute(interaction) {
+    if (!validateGuild(interaction)) {
+      return interaction.editReply({ content: '❌ You can only execute this command in the official server.', flags: MessageFlags.Ephemeral });
+    }
+
     if (!isChairman(interaction.member)) {
       return interaction.editReply({ content: '❌ Only Chairmen are allowed to toggle the transfer window.', ephemeral: true });
     }

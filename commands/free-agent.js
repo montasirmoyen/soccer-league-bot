@@ -1,53 +1,28 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
+const { getPositionChoices, getTimezoneChoices } = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 const cooldowns = new Map();
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('freeagent')
+    .setName('free-agent')
     .setDescription('Register yourself as a free agent')
     .addStringOption((option) =>
       option
         .setName('position')
         .setDescription('Your preferred position')
         .setRequired(true)
-        .addChoices(
-          { name: 'GK', value: 'GK' },
-          { name: 'LB', value: 'LB' },
-          { name: 'RB', value: 'RB' },
-          { name: 'CB', value: 'CB' },
-          { name: 'CDM', value: 'CDM' },
-          { name: 'CM', value: 'CM' },
-          { name: 'RM', value: 'RM' },
-          { name: 'LM', value: 'LM' },
-          { name: 'CAM', value: 'CAM' },
-          { name: 'RW', value: 'RW' },
-          { name: 'LW', value: 'LW' },
-          { name: 'CF', value: 'CF' },
-          { name: 'ST', value: 'ST' }
-        )
+        .addChoices(getPositionChoices()) 
     )
     .addStringOption((option) =>
       option
         .setName('region')
         .setDescription('Your timezone/region')
         .setRequired(true)
-        .addChoices(
-          { name: 'GMT', value: 'GMT' },
-          { name: 'BST', value: 'BST' },
-          { name: 'EST', value: 'EST' },
-          { name: 'CST', value: 'CST' },
-          { name: 'PST', value: 'PST' },
-          { name: 'UTC', value: 'UTC' },
-          { name: 'WEST', value: 'WEST' },
-          { name: 'EET', value: 'EET' },
-          { name: 'EEST', value: 'EEST' },
-          { name: 'MSK', value: 'MSK' },
-          { name: 'OTHER', value: 'OTHER' }
-        )
+        .addChoices(getTimezoneChoices())
     ),
 
   async execute(interaction) {
@@ -59,12 +34,20 @@ module.exports = {
     console.log(`\n🏃 [freeagent.js] Free agent registration by ${user.tag}`);
 
     try {
-      const isStaff = await database.isUserStaffAnywhere(userId);
-      if (isStaff) {
-        return interaction.editReply({ content: '❌ Management staff cannot register as free agents.', ephemeral: true });
+      const contract = await database.getContractedTeam(userId);
+      if (contract) {
+        return interaction.editReply({
+          content: `❌ You are already contracted to **${contract.teamName}**.`,
+          flags: MessageFlags.Ephemeral
+        });
       }
 
-      const cooldownAmount = 6 * 60 * 60 * 1000;
+      const isStaff = await database.isUserStaffAnywhere(userId);
+      if (isStaff) {
+        return interaction.editReply({ content: '❌ Management staff cannot register as free agents.', flags: MessageFlags.Ephemeral });
+      }
+
+      const cooldownAmount = 3 * 24 * 60 * 60 * 1000;
       const now = Date.now();
 
       if (cooldowns.has(userId)) {
@@ -77,17 +60,9 @@ module.exports = {
 
           return interaction.editReply({
             content: `⏰ You're on cooldown! Try again in ${hours}h ${minutes}m.`,
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         }
-      }
-
-      const contract = await database.getContractedTeam(userId);
-      if (contract) {
-        return interaction.editReply({
-          content: `❌ You are already contracted to **${contract.teamName}**.`,
-          ephemeral: true,
-        });
       }
 
       cooldowns.set(userId, now);
@@ -107,18 +82,18 @@ module.exports = {
       if (!targetChannel) {
         return interaction.editReply({
           content: '⚠️ Could not find the free agent channel.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
       await targetChannel.send({ content: `<@${userId}>`, embeds: [embed] });
       await interaction.editReply({
         content: '✅ You have been registered as a free agent!',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     } catch (error) {
       console.error('❌ Error in /freeagent:', error);
-      return interaction.editReply({ content: '❌ An error occurred while registering as a free agent.', ephemeral: true });
+      return interaction.editReply({ content: '❌ An error occurred while registering as a free agent.', flags: MessageFlags.Ephemeral });
     }
   },
 };

@@ -3,7 +3,7 @@ const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
-const { canManageTeam } = require('../utils/validations');
+const { canManageTeam, validateGuild } = require('../utils/validations');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -18,6 +18,10 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    if (!validateGuild(interaction)) {
+      return interaction.editReply({ content: '❌ You can only execute this command in the official server.', flags: MessageFlags.Ephemeral });
+    }
+
     const selectedTeam = interaction.options.getString('team');
     const targetUser = interaction.options.getUser('signee');
 
@@ -65,7 +69,7 @@ module.exports = {
       await targetUser.send({ embeds: [contractEmbed], components: [row] });
 
       return interaction.editReply({ content: `📨 Contract offer sent to <@${targetUser.id}>'s DM for ${formattedTeamName}!`, flags: MessageFlags.Ephemeral });
-      
+
     } catch (error) {
       if (error.code === 50007) {
         return interaction.editReply({ content: `❌ Could not send the offer. <@${targetUser.id}> likely has DMs closed.`, flags: MessageFlags.Ephemeral });

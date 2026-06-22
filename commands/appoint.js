@@ -4,7 +4,7 @@ const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { safeRoleAdd, safeRoleRemove, safeFetchMember } = require('../utils/discord-helpers');
-const { canManageTeam, isChairman, isTeamManager } = require('../utils/validations');
+const { canManageTeam, isChairman, isTeamManager, validateGuild } = require('../utils/validations');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -26,6 +26,10 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    if (!validateGuild(interaction)) {
+      return interaction.editReply({ content: '❌ You can only execute this command in the official server.', flags: MessageFlags.Ephemeral });
+    }
+
     const selectedTeam = interaction.options.getString('team');
     const selectedRole = interaction.options.getString('role');
     const appointee = interaction.options.getUser('appointee');

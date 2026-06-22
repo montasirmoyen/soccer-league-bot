@@ -4,7 +4,7 @@ const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { safeRoleRemove, safeFetchMember } = require('../utils/discord-helpers');
-const { canManageTeam } = require('../utils/validations');
+const { canManageTeam, validateGuild } = require('../utils/validations');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,6 +15,10 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    if (!validateGuild(interaction)) {
+          return interaction.editReply({ content: '❌ You can only execute this command in the official server.', flags: MessageFlags.Ephemeral });
+    }
+
     const targetUser = interaction.options.getUser('player');
 
     if (targetUser.bot) {

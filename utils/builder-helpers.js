@@ -1,5 +1,7 @@
 const { Client } = require('discord.js');
 const configTeams = require('../config/teams');
+const configPositions = require('../config/positions')
+const configTimezones = require('../config/timezones')
 const constants = require('../config/constants');
 const database = require('../db/database');
 const countryEmoji = require('country-emoji');
@@ -16,7 +18,6 @@ function getFormattedTeamName(teamKey) {
 
 function getTeamChoices() {
     const teamKeys = Object.keys(configTeams.teams);
-
     return teamKeys.map(team => {
         const formattedName = team
             .toLowerCase()
@@ -28,6 +29,28 @@ function getTeamChoices() {
             name: getFormattedTeamName(team),
             value: team
         };
+    });
+}
+
+function getPositionChoices() {
+    const positionKeys = Object.keys(configPositions.positions);
+    return positionKeys.map(position => {
+        const emoji = configPositions.positions[position].EMOJI;
+        return {
+            name: `${emoji} ${position}`,
+            value: position
+        };
+    });
+}
+
+function getTimezoneChoices() {
+    const timezoneKeys = Object.keys(configTimezones.timezones)
+    return timezoneKeys.map(timezone => {
+        const emoji = configTimezones.timezones[timezone].EMOJI;
+        return {
+            name: `${emoji} ${timezone}`,
+            value: timezone
+        }
     });
 }
 
@@ -58,9 +81,11 @@ async function getDisplayedPlayersAmount(teamKey) {
 }
 
 module.exports = {
-    getTeamChoices,
     getFormattedTeamName,
+    getTeamChoices,
+    getPositionChoices,
+    getTimezoneChoices,
     getTeamRole,
     getTeamPlayersAmount,
-    getDisplayedPlayersAmount,
+    getDisplayedPlayersAmount
 };

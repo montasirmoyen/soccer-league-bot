@@ -18,4 +18,9 @@ function canManageTeam(member, teamInfo) {
   return isChairman(member) || isTeamStaff(teamInfo, member.id);
 }
 
-module.exports = { isChairman, isTeamStaff, isTeamManager, canManageTeam };
+async function validateGuild(interaction) {
+  const mainGuildId = process.env.MAIN_GUILD_ID;
+  return interaction.guildId && interaction.guildId === mainGuildId;
+}
+
+module.exports = { isChairman, isTeamStaff, isTeamManager, canManageTeam, validateGuild };

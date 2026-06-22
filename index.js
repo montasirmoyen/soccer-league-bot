@@ -1,17 +1,16 @@
 require('dotenv').config();
 
 const { Client, Collection, GatewayIntentBits, ActivityType } = require('discord.js');
-const { connectMongo } = require('./db/connect');
-const { loadCommands } = require('./bot/loadCommands');
-const { registerCommands } = require('./bot/registerCommands');
-const { startHealthServer } = require('./web/healthServer');
+const { loadCommands } = require('./bot/load-commands');
+const { registerCommands } = require('./bot/register-commands');
+const { startHealthServer } = require('./web/health-server');
 const database = require('./db/database');
 const constants = require('./config/constants');
-const builderHelpers = require('./utils/builderHelpers');
-const errorHandler = require('./utils/errorHandler');
-const { buildPSLEmbed } = require('./utils/embedHelpers');
-const { safeRoleAdd } = require('./utils/discordHelpers');
-const { logError, replyWithError } = require('./utils/errorHandler');
+const builderHelpers = require('./utils/builder-helpers');
+const { buildPSLEmbed } = require('./utils/embed-helpers');
+const { safeRoleAdd } = require('./utils/discord-helpers');
+const { logError, replyWithError } = require('./utils/error-handler');
+const { registerVerifierHandler } = require('./handlers/verifier-handler');
 
 class UserFacingError extends Error {
   constructor(message) {
@@ -201,13 +200,15 @@ async function bootstrap() {
 
   startHealthServer();
 
-  await connectMongo();
+  await database.connectMongo();
   console.log('✅ Connected to MongoDB');
 
   await database.seedTeamsIfNeeded();
 
   const commands = loadCommands(client);
   await registerCommands(commands);
+
+  registerVerifierHandler(client);
 
   setInterval(cleanupExpiredEntries, TIMERS.CLEANUP_INTERVAL_MS).unref();
 
@@ -360,19 +361,16 @@ async function processAcceptance(interaction, client, teamName, userId, issuerId
       TIMERS.GUILD_FETCH_TIMEOUT_MS, 'Guild fetch timeout'
     );
 
-    // Validação de limite de emergência
     if (isEmergency && teamInfo && teamInfo.emergencySignsUsed >= constants.MAX_EMERGENCY_SIGNS_PER_TEAM) {
       return await safeRespond(interaction, { content: `❌ **Signing failed:** **${teamName}** used all emergency spots.`, ephemeral: true });
     }
 
-    // Consultas no banco
     const [isWindowOpen, activeContract, squadSize] = await Promise.all([
       database.getTransferWindowState(),
       database.getContractedTeam(userId),
       database.getPlayersByTeam(teamName),
     ]);
 
-    // Validações pós-banco
     if (!isEmergency && !isWindowOpen) {
       return await safeRespond(interaction, { content: '❌ **Signing failed:** The transfer window closed while reviewing.', ephemeral: true });
     }
@@ -383,9 +381,8 @@ async function processAcceptance(interaction, client, teamName, userId, issuerId
       return await safeRespond(interaction, { content: `❌ **Signing failed:** **${teamName}** roster is full.`, ephemeral: true });
     }
 
-    // Processo de assinatura 
     const targetMember = await guild.members.fetch(userId);
-    await database.contractPlayer(userId, teamName, '⚽');
+    await database.contractPlayer(userId, teamName);
 
     let updatedTeamInfo = teamInfo;
     if (isEmergency) {
@@ -396,7 +393,6 @@ async function processAcceptance(interaction, client, teamName, userId, issuerId
 
     const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName).toUpperCase()}**`;
 
-    // Processamento paralelo de Embeds e DMs (Não bloqueia o retorno ao usuário)
     Promise.all([
       (async () => {
         try {

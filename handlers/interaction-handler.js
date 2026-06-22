@@ -1,7 +1,7 @@
 const { Events } = require('discord.js');
 const { handleCommand } = require('./commandHandler');
 const { handleButton } = require('./buttonHandler');
-const { handleAnnounceModal } = require('./modalHandler');
+const { handleAnnounceModal } = require('./modal-handler');
 
 function registerInteractionHandler(client, emojiMap) {
   client.on(Events.InteractionCreate, async (interaction) => {

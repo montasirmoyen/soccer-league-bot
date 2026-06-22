@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
-const { buildPSLEmbed } = require('../utils/embedHelpers');
+const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 const regions = ['GMT', 'BST', 'EST', 'CST', 'PST', 'OTHER'];
 const types = ['DM TO PLAY', 'IN GAME ALREADY'];

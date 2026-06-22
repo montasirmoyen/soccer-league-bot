@@ -2,7 +2,7 @@ const { SlashCommandBuilder } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
 const { isChairman } = require('../utils/validations');
-const { buildPSLEmbed } = require('../utils/embedHelpers');
+const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 const WINDOW_EMBED_TITLE = '⚽ TRANSFER WINDOW STATUS UPDATE';
 

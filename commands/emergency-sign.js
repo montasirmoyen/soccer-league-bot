@@ -1,9 +1,9 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
-const builderHelpers = require('../utils/builderHelpers');
+const builderHelpers = require('../utils/builder-helpers');
+const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { canManageTeam } = require('../utils/validations');
-const { buildPSLEmbed } = require('../utils/embedHelpers');
 
 module.exports = {
   data: new SlashCommandBuilder()

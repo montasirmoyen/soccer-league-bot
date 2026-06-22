@@ -1,17 +1,24 @@
-const Contract = require('./models/Contract');
-const Team = require('./models/Team');
-const Config = require('./models/Config');
-const PlayerHistory = require('./models/PlayerHistory');
+const mongoose = require('mongoose');
+const Contract = require('./models/player-contract');
+const Team = require('./models/team');
+const Config = require('./models/config');
+const PlayerHistory = require('./models/player-history');
 const configTeams = require('../config/teams');
-const { logError } = require('../utils/errorHandler');
+const { logError } = require('../utils/error-handler');
+
+async function connectMongo() {
+  await mongoose.connect(process.env.MONGODB_URI);
+}
 
 module.exports = {
+  connectMongo,
+
   // ── Contracts ─────────────────────────────────────────────
 
   getContractedTeam: (userId) => Contract.findOne({ userId }).exec(),
 
-  contractPlayer: async (userId, teamName, emoji) => {
-    const newContract = new Contract({ userId, teamName, emoji });
+  contractPlayer: async (userId, teamName) => {
+    const newContract = new Contract({ userId, teamName });
     return newContract.save();
   },
 

@@ -3,7 +3,7 @@ const database = require('../db/database');
 const constants = require('../config/constants');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 
-const regions = ['GMT', 'BST', 'EST', 'CST', 'PST', 'OTHER'];
+const regions = ['GMT', 'BST', 'EST', 'CST', 'PST', 'IST', 'OTHER'];
 const types = ['DM TO PLAY', 'IN GAME ALREADY'];
 
 const cooldowns = new Map();

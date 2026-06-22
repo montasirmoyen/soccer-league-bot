@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const Contract = require('./models/player-contract');
 const Team = require('./models/team');
-const Config = require('./models/config');
+const Configuration = require('./models/configuration');
 const PlayerHistory = require('./models/player-history');
 const configTeams = require('../config/teams');
 const { logError } = require('../utils/error-handler');
@@ -59,16 +59,16 @@ module.exports = {
   // ── Transfer Window ────────────────────────────────────────
 
   getTransferWindowState: async () => {
-    let config = await Config.findOne({ key: 'global' });
+    let config = await Configuration.findOne({ key: 'global' });
     if (!config) {
-      config = new Config({ key: 'global', transferWindowOpened: false });
+      config = new Configuration({ key: 'global', transferWindowOpened: false });
       await config.save();
     }
     return config.transferWindowOpened;
   },
 
   setTransferWindowState: (isOpen) =>
-    Config.findOneAndUpdate(
+    Configuration.findOneAndUpdate(
       { key: 'global' },
       { $set: { transferWindowOpened: isOpen } },
       { new: true, upsert: true }

@@ -4,7 +4,7 @@ const constants = require('../config/constants');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 const regions = ['GMT', 'BST', 'EST', 'CST', 'PST', 'IST', 'OTHER'];
-const types = ['DM TO PLAY', 'IN GAME ALREADY'];
+const types = ['DM TO PLAY', 'IN GAME ALREADY', 'PING TO PLAY'];
 
 const cooldowns = new Map();
 const COOLDOWN_TIME = 30 * 60 * 1000;

@@ -6,6 +6,10 @@ const constants = require('../config/constants');
 const database = require('../db/database');
 const countryEmoji = require('country-emoji');
 
+function getTeamFlag(teamKey) {
+    return countryEmoji.flag(teamKey) || '🏳️'
+}
+
 function getFormattedTeamName(teamKey) {
     const formattedName = teamKey
         .toLowerCase()
@@ -13,7 +17,9 @@ function getFormattedTeamName(teamKey) {
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
 
-    return `${countryEmoji.flag(teamKey) || '🏳️'} ${formattedName}`;
+    const teamFlag = getTeamFlag(teamKey)
+
+    return `${teamFlag} ${formattedName}`;
 }
 
 function getTeamChoices() {
@@ -81,6 +87,7 @@ async function getDisplayedPlayersAmount(teamKey) {
 }
 
 module.exports = {
+    getTeamFlag,
     getFormattedTeamName,
     getTeamChoices,
     getPositionChoices,

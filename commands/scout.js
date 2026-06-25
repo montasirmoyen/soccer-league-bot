@@ -1,7 +1,9 @@
 const { SlashCommandBuilder } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
+const { getPositionChoices } = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { isChairman } = require('../utils/validations');
 
 const cooldowns = new Map();
 
@@ -14,22 +16,7 @@ module.exports = {
         .setName('position')
         .setDescription('Position you are scouting for')
         .setRequired(true)
-        .addChoices(
-          { name: 'ALL', value: 'ALL' },
-          { name: 'GK', value: 'GK' },
-          { name: 'LB', value: 'LB' },
-          { name: 'RB', value: 'RB' },
-          { name: 'CB', value: 'CB' },
-          { name: 'CDM', value: 'CDM' },
-          { name: 'CM', value: 'CM' },
-          { name: 'RM', value: 'RM' },
-          { name: 'LM', value: 'LM' },
-          { name: 'CAM', value: 'CAM' },
-          { name: 'RW', value: 'RW' },
-          { name: 'LW', value: 'LW' },
-          { name: 'CF', value: 'CF' },
-          { name: 'ST', value: 'ST' }
-        )
+        .addChoices(getPositionChoices())
     )
     .addStringOption((option) =>
       option
@@ -40,29 +27,29 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    const user = interaction.user.id;
+    const userId = interaction.user.id;
     const position = interaction.options.getString('position');
     const message = interaction.options.getString('message');
 
     console.log(`\n🔍 [scout.js] Scout posted by ${interaction.user.tag}`);
 
     try {
-      const staffRecord = await database.isUserStaffAnywhere(user);
-      if (!staffRecord) {
+      const staffRecord = await database.isUserStaffAnywhere(userId);
+      const adminOverride = isChairman(interaction.member);
+
+      if (!staffRecord && !adminOverride) {
         return interaction.editReply({ content: '❌ You are not an authorized manager.', ephemeral: true });
       }
 
       const cooldownAmount = 3 * 60 * 60 * 1000;
       const now = Date.now();
 
-      if (cooldowns.has(user)) {
-        const expirationTime = cooldowns.get(user) + cooldownAmount;
-
+      if (cooldowns.has(userId)) {
+        const expirationTime = cooldowns.get(userId) + cooldownAmount;
         if (now < expirationTime) {
-          const timeLeft = (expirationTime - now) / 1000;
-          const hours = Math.floor(timeLeft / 3600);
-          const minutes = Math.floor((timeLeft % 3600) / 60);
-
+          const timeLeft = expirationTime - now;
+          const hours = Math.floor(timeLeft / 3600000);
+          const minutes = Math.floor((timeLeft % 3600000) / 60000);
           return interaction.editReply({
             content: `⏰ You're on cooldown! You can scout again in ${hours}h ${minutes}m.`,
             ephemeral: true,
@@ -70,18 +57,18 @@ module.exports = {
         }
       }
 
-      cooldowns.set(user, now);
-      setTimeout(() => {
-        cooldowns.delete(user);
-      }, cooldownAmount);
+      cooldowns.set(userId, now);
+      setTimeout(() => cooldowns.delete(userId), cooldownAmount);
+
+      const scoutingTeamName = staffRecord ? staffRecord.name : 'PSL Staff';
 
       const embed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
         .setTitle('🔍 Player Scout')
         .setDescription(
-          `**${staffRecord.name}** is scouting for players!\n\n` +
+          `**${scoutingTeamName}** is scouting for players!\n\n` +
           `📌 **Position**: ${position}\n\n` +
           `💬 **Message**:\n${message}\n\n` +
-          `*If you're interested and available, feel free to DM <@${user}>!*`
+          `*If you're interested and available, feel free to DM <@${userId}>!*`
         )
         .setAuthor({
           name: interaction.user.displayName,
@@ -91,15 +78,9 @@ module.exports = {
       const targetChannel = await interaction.client.channels.fetch(constants.SCOUT_CHANNEL_ID);
       if (targetChannel) {
         await targetChannel.send({ embeds: [embed] });
-        await interaction.editReply({
-          content: '✅ Your scouting message has been posted!',
-          ephemeral: true,
-        });
+        await interaction.editReply({ content: '✅ Your scouting message has been posted!', ephemeral: true });
       } else {
-        await interaction.editReply({
-          content: '⚠️ Could not find the scouting channel.',
-          ephemeral: true,
-        });
+        await interaction.editReply({ content: '⚠️ Could not find the scouting channel.', ephemeral: true });
       }
     } catch (error) {
       console.error('❌ Error in /scout:', error);

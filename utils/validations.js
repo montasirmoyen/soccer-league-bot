@@ -1,7 +1,18 @@
 const constants = require('../config/constants');
 
 function isChairman(member) {
-  return member.roles.cache.has(constants.CHAIRMAN_ROLE_ID);
+  return (
+    member.roles.cache.has(constants.CHAIRMAN_ROLE_ID) ||
+    member.roles.cache.has(constants.OVERSEER_ROLE_ID)
+  );
+}
+
+function isRefereeOrAdmin(member) {
+  return (
+    member.roles.cache.has(constants.REFEREE_ROLE_ID) ||
+    member.roles.cache.has(constants.CHAIRMAN_ROLE_ID) ||
+    member.roles.cache.has(constants.OVERSEER_ROLE_ID)
+  );
 }
 
 function isTeamStaff(teamInfo, userId) {
@@ -10,17 +21,28 @@ function isTeamStaff(teamInfo, userId) {
 }
 
 function isTeamManager(teamInfo, userId) {
-  if (!teamInfo) return façse;
-  return teamInfo.manager === userId
+  if (!teamInfo) return false;
+  return teamInfo.manager === userId;
 }
 
 function canManageTeam(member, teamInfo) {
   return isChairman(member) || isTeamStaff(teamInfo, member.id);
 }
 
-async function validateGuild(interaction) {
-  const mainGuildId = process.env.MAIN_GUILD_ID;
-  return interaction.guildId && interaction.guildId === mainGuildId;
+function isRosterFull(squad) {
+  return squad.length >= constants.MAX_ROSTER_SIZE;
 }
 
-module.exports = { isChairman, isTeamStaff, isTeamManager, canManageTeam, validateGuild };
+function validateGuild(interaction) {
+  return interaction.guildId === constants.GUILD_ID;
+}
+
+module.exports = {
+  isChairman,
+  isRefereeOrAdmin,
+  isTeamStaff,
+  isTeamManager,
+  canManageTeam,
+  isRosterFull,
+  validateGuild,
+};

@@ -2,6 +2,7 @@ const { SlashCommandBuilder } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { isChairman } = require('../utils/validations');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -14,14 +15,14 @@ module.exports = {
     try {
       const userId = interaction.user.id;
       const staffRecord = await database.isUserStaffAnywhere(userId);
-      const isManager = !!staffRecord;
+      const isManager = !!staffRecord || isChairman(interaction.member);
 
       const mainEmbed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
         .setTitle('⚽ PSL COMPLETE COMMAND GUIDE')
         .setDescription('Pure Soccer League - All Commands & Instructions for Players & Managers')
         .setThumbnail(interaction.client.user.avatarURL());
 
-      // ── ALL PLAYER COMMANDS ──────────────────────────────────
+      // ── ALL PLAYER COMMANDS ────────────────────────────────────────────────
       mainEmbed.addFields({
         name: '👤 PLAYER COMMANDS (Available to Everyone)',
         value: '═══════════════════════════════════════',
@@ -51,13 +52,13 @@ module.exports = {
         }
       );
 
-      // ── ALL MANAGER COMMANDS ─────────────────────────────────
+      // ── ALL MANAGER COMMANDS ───────────────────────────────────────────────
       if (isManager) {
-        mainEmbed.addFields({
-          name: '👔 MANAGER COMMANDS (Your Team: ' + staffRecord.name + ')',
-          value: '═══════════════════════════════════════',
-          inline: false,
-        });
+        const sectionTitle = staffRecord
+          ? `👔 MANAGER COMMANDS (Your Team: ${staffRecord.name})`
+          : '👔 MANAGER COMMANDS (Admin)';
+
+        mainEmbed.addFields({ name: sectionTitle, value: '═══════════════════════════════════════', inline: false });
 
         mainEmbed.addFields(
           {
@@ -66,13 +67,13 @@ module.exports = {
             inline: false,
           },
           {
-            name: '🚨 `/emergencysign @player`',
+            name: '🚨 `/emergency-sign @player`',
             value: '**Purpose:** Sign player when transfer window is CLOSED\n**Limit:** ' + constants.MAX_EMERGENCY_SIGNS_PER_TEAM + ' per team per season\n**Roster:** Team must have space\n**Cooldown:** 4 seconds between sends\n**Result:** DM sent to player | Posted to #signings with emergency badge',
             inline: false,
           },
           {
             name: '🔍 `/scout [position] [message]`',
-            value: '**Purpose:** Post wanted ad for specific player position\n**Positions:** GK, RB, LB, CB, CDM, CM, RM, LM, CAM, LW, RW, CF, ST\n**Message:** Custom recruitment note\n**Result:** Posted to #scouting for free agents to see\n**Cooldown:** 4 seconds',
+            value: '**Purpose:** Post wanted ad for specific player position\n**Positions:** GK, RB, LB, CB, CDM, CM, CAM, LW, RW, ST\n**Message:** Custom recruitment note\n**Result:** Posted to #scouting for free agents to see\n**Cooldown:** 4 seconds',
             inline: false,
           },
           {
@@ -89,52 +90,56 @@ module.exports = {
             name: '🏆 `/appoint [role] @user`',
             value: '**Purpose:** Assign manager or assistant manager\n**Roles:** manager, assistantManager\n**Requirement:** Staff role on team\n**Result:** Staff role assignment updated',
             inline: false,
+          },
+          {
+            name: '⚽ `/match-inform [team1] [team2] [notes]`',
+            value: '**Purpose:** Send a match notification to all players and staff of two teams\n**Permissions:** Referee, Chairman, Overseer\n**Result:** Polished match embed delivered to every player\'s DMs',
+            inline: false,
           }
         );
       }
 
-      // ── ADMIN COMMANDS ───────────────────────────────────────
-      mainEmbed.addFields({
-        name: '🔧 ADMIN COMMANDS',
-        value: '═══════════════════════════════════════',
-        inline: false,
-      });
+      // ── ADMIN COMMANDS ─────────────────────────────────────────────────────
+      mainEmbed.addFields({ name: '🔧 ADMIN COMMANDS', value: '═══════════════════════════════════════', inline: false });
 
       mainEmbed.addFields(
         {
           name: '📢 `/announce [message]`',
-          value: '**Purpose:** Broadcast important server announcements\n**Requirements:** Server admin role\n**Result:** Posted to #announcements',
+          value: '**Purpose:** Broadcast important server announcements\n**Requirements:** Chairman / Overseer\n**Result:** Posted to #announcements',
           inline: false,
         },
         {
-          name: '🪟 `/transferwindow [open/close]`',
+          name: '🪟 `/transfer-window [open/close]`',
           value: '**Purpose:** Toggle transfer window status\n**Effect:** Controls if teams can send contracts\n**CLOSED:** Can only use `/emergencysign` (limited)\n**OPEN:** Can use `/contract` freely',
+          inline: false,
+        },
+        {
+          name: '📋 `/update-teams`',
+          value: '**Purpose:** Refresh the master teams embed in #teams\n**Requirements:** Chairman / Overseer\n**Result:** All 24 teams displayed with live roster counts',
           inline: false,
         }
       );
 
-      // ── QUICK REFERENCE SECTION ──────────────────────────────
+      // ── QUICK REFERENCE ────────────────────────────────────────────────────
       mainEmbed.addFields(
         {
           name: '📍 Available Positions',
-          value: '`GK` `RB` `LB` `CB` `CDM` `CM` `RM` `LM` `CAM` `LW` `RW` `CF` `ST`',
+          value: '`GK` `RB` `LB` `CB` `CDM` `CM` `CAM` `LW` `RW` `ST`',
           inline: false,
         },
         {
           name: '🕐 Key Constraints',
           value: '• **Roster Size:** ' + constants.MAX_ROSTER_SIZE + ' players max per team\n' +
-                  '• **Emergency Signings:** ' + constants.MAX_EMERGENCY_SIGNS_PER_TEAM + ' per season (window closed only)\n' +
-                  '• **Demands:** ' + constants.MAX_DEMANDS_PER_SEASON + ' per player per season\n' +
-                  '• **Rate Limits:** Prevents spam (2-4 second cooldowns)',
+            '• **Emergency Signings:** ' + constants.MAX_EMERGENCY_SIGNS_PER_TEAM + ' per season (window closed only)\n' +
+            '• **Demands:** ' + constants.MAX_DEMANDS_PER_SEASON + ' per player per season\n' +
+            '• **Rate Limits:** Prevents spam (2-4 second cooldowns)',
           inline: false,
         },
         {
           name: '⚠️ Important Rules',
           value: '✅ Players must be released before joining another team\n' +
-                  '✅ Staff cannot register as players\n' +
-                  '✅ Transfer window affects contract availability\n' +
-                  '✅ Free agents posted automatically to #transfer-market\n' +
-                  '✅ All signings logged to #signings & #releases',
+            '✅ Transfer window affects contract availability\n' +
+            '✅ All signings logged to #signings & #releases',
           inline: false,
         },
         {

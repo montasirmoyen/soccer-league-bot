@@ -29,7 +29,7 @@ module.exports = {
       const playerTeam = activeContract.teamName;
       const [teamInfo, demandsUsed] = await Promise.all([
         database.getTeamInfo(playerTeam),
-        database.getPlayerDemandsCount(userId)
+        database.getPlayerDemandsCount(userId),
       ]);
 
       if (teamInfo && isTeamStaff(teamInfo, userId)) {
@@ -44,14 +44,13 @@ module.exports = {
 
       if (cooldowns.has(userId)) {
         const expirationTime = cooldowns.get(userId) + cooldownAmount;
-
         if (now < expirationTime) {
-          const timeLeft = (expirationTime - now) / 1000;
-          const hours = Math.floor(timeLeft / 3600);
-          const minutes = Math.floor((timeLeft % 3600) / 60);
-
+          const timeLeft = expirationTime - now;
+          const hours = Math.floor(timeLeft / 3600000);
+          const minutes = Math.floor((timeLeft % 3600000) / 60000);
           return interaction.editReply({
-            content: `⏰ You are on cooldown! Please try again in **${hours}**h **${minutes}**m.`
+            content: `⏰ You are on cooldown! Please try again in **${hours}**h **${minutes}**m.`,
+            flags: MessageFlags.Ephemeral,
           });
         }
       }
@@ -65,7 +64,10 @@ module.exports = {
       const remainingDemands = constants.MAX_DEMANDS_PER_SEASON - updatedHistory.demandsUsed;
       const formattedTeamName = `**${playerTeam.toUpperCase()}**`;
 
-      interaction.editReply({ content: `✅ You have left ${formattedTeamName}. You have **${remainingDemands}** demand(s) remaining this season.`, flags: MessageFlags.Ephemeral });
+      interaction.editReply({
+        content: `✅ You have left ${formattedTeamName}. You have **${remainingDemands}** demand(s) remaining this season.`,
+        flags: MessageFlags.Ephemeral,
+      });
 
       (async () => {
         if (teamInfo?.roleId) {
@@ -74,16 +76,20 @@ module.exports = {
 
         const releasesChannel = await interaction.client.channels.fetch(constants.RELEASES_CHANNEL_ID).catch(() => null);
         if (releasesChannel) {
-          const [teamCapacity, teamManager, teamAssistant] = await Promise.all([
+          const [teamCapacity, teamManager, teamAssistant, role] = await Promise.all([
             builderHelpers.getDisplayedPlayersAmount(playerTeam),
             database.getTeamStaff(playerTeam, 'manager'),
-            database.getTeamStaff(playerTeam, 'assistantManager')
+            database.getTeamStaff(playerTeam, 'assistantManager'),
+            builderHelpers.getTeamRole(interaction.client, playerTeam),
           ]);
 
           const demandEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
             .setTitle(`${formattedTeamName} OFFICIAL DEMAND`)
             .addFields(
-              { name: 'Player Demanded Release', value: `<@${userId}> has voluntarily left ${formattedTeamName} and is now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_SEASON})` },
+              {
+                name: 'Player Demanded Release',
+                value: `<@${userId}> has voluntarily left ${formattedTeamName} and is now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_SEASON})`,
+              },
               { name: 'Team Capacity', value: teamCapacity }
             );
 
@@ -99,7 +105,9 @@ module.exports = {
 
     } catch (error) {
       console.error('❌ Error in /demand:', error);
-      if (!interaction.replied) interaction.editReply({ content: '❌ An error occurred processing your demand.', flags: MessageFlags.Ephemeral });
+      if (!interaction.replied) {
+        interaction.editReply({ content: '❌ An error occurred processing your demand.', flags: MessageFlags.Ephemeral });
+      }
     }
   },
 };

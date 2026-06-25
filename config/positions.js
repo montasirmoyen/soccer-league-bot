@@ -16,6 +16,9 @@ module.exports = {
         // Attackers
         'LW': { EMOJI: '🎯' },
         'RW': { EMOJI: '🎯' },
-        'ST': { EMOJI: '🎯' }
+        'ST': { EMOJI: '🎯' },
+
+        // Any
+        'ANY': { EMOJI: '❔' }
     }
 };

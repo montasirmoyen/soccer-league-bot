@@ -13,7 +13,7 @@ async function connectMongo() {
 module.exports = {
   connectMongo,
 
-  // ── Contracts ─────────────────────────────────────────────
+  // ── Contracts ─────────────────────────────────────────────────────────────
 
   getContractedTeam: (userId) => Contract.findOne({ userId }).exec(),
 
@@ -26,14 +26,16 @@ module.exports = {
 
   getPlayersByTeam: (teamName) => Contract.find({ teamName }).exec(),
 
-  // ── Teams ──────────────────────────────────────────────────
+  getAllContracts: () => Contract.find({}).exec(),
+
+  // ── Teams ──────────────────────────────────────────────────────────────────
 
   getTeamInfo: (teamName) =>
     Team.findOne({ name: teamName.toUpperCase() }).exec(),
 
   getTeamStaff: (teamName, roleType) =>
     Team.findOne({ name: teamName.toUpperCase() }, { [roleType]: 1 }).exec(),
-  
+
   isUserStaffAnywhere: (userId) =>
     Team.findOne({ $or: [{ manager: userId }, { assistantManager: userId }] }).exec(),
 
@@ -56,7 +58,9 @@ module.exports = {
       { new: true }
     ),
 
-  // ── Transfer Window ────────────────────────────────────────
+  getAllTeams: () => Team.find({}).sort({ name: 1 }).exec(),
+
+  // ── Transfer Window ────────────────────────────────────────────────────────
 
   getTransferWindowState: async () => {
     let config = await Configuration.findOne({ key: 'global' });
@@ -74,7 +78,7 @@ module.exports = {
       { new: true, upsert: true }
     ),
 
-  // ── Player History ─────────────────────────────────────────
+  // ── Player History ─────────────────────────────────────────────────────────
 
   getPlayerDemandsCount: async (userId) => {
     const history = await PlayerHistory.findOne({ userId }).exec();
@@ -88,7 +92,7 @@ module.exports = {
       { new: true, upsert: true }
     ),
 
-  // ── Seed ───────────────────────────────────────────────────
+  // ── Seed ───────────────────────────────────────────────────────────────────
 
   seedTeamsIfNeeded: async () => {
     try {

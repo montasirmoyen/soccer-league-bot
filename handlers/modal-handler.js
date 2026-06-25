@@ -3,7 +3,7 @@ const { isChairman } = require('../utils/validations');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 async function handleAnnounceModal(interaction, emojiMap) {
-  console.log(`\n📣 [modalHandler.js] Announcement modal submitted by ${interaction.user.tag}`);
+  console.log(`\n📣 [modal-handler.js] Announcement modal submitted by ${interaction.user.tag}`);
 
   try {
     const member = interaction.member;
@@ -31,7 +31,7 @@ async function handleAnnounceModal(interaction, emojiMap) {
 
     await interaction.reply({ content: '✅ Announcement sent!', ephemeral: true });
   } catch (error) {
-    console.error('[modalHandler.js] Error handling announcement modal:', error);
+    console.error('[modal-handler.js] Error handling announcement modal:', error);
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp({ content: '❌ An error occurred while sending the announcement.', ephemeral: true });
     } else {

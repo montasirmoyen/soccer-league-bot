@@ -5,11 +5,11 @@ const {
   ButtonStyle,
   MessageFlags,
 } = require('discord.js');
-const database       = require('../db/database');
-const constants      = require('../config/constants');
+const database = require('../db/database');
+const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
-const { buildPSLEmbed }              = require('../utils/embed-helpers');
-const { canManageTeam, validateGuild } = require('../utils/validations');
+const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { canManageTeam, validateGuild, isRegistered } = require('../utils/validations');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -38,20 +38,27 @@ module.exports = {
     }
 
     const selectedTeam = interaction.options.getString('team');
-    const targetUser   = interaction.options.getUser('signee');
+    const signee = interaction.options.getMember('signee');
 
-    if (targetUser.bot) {
+    if (signee.bot) {
       return interaction.editReply({
         content: '❌ You cannot send a contract to a bot.',
         flags: MessageFlags.Ephemeral,
       });
     }
 
-    const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+    const targetMember = await interaction.guild.members.fetch(signee.id).catch(() => null);
     if (!targetMember) {
       return interaction.editReply({
-        content: `❌ <@${targetUser.id}> is not currently a member of this server.`,
+        content: `❌ <@${signee.id}> is not currently a member of this server.`,
         flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    if (!(await isRegistered(signee))) {
+      return interaction.editReply({
+        content: `❌ <@${signee.id}> has not registered themselves yet.`,
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -59,8 +66,8 @@ module.exports = {
       const [isWindowOpen, teamInfo, isStaffSomewhere, activeContract, currentSquad] = await Promise.all([
         database.getTransferWindowState(),
         database.getTeamInfo(selectedTeam),
-        database.isUserStaffAnywhere(targetUser.id),
-        database.getContractedTeam(targetUser.id),
+        database.isUserStaffAnywhere(signee.id),
+        database.getContractedTeam(signee.id),
         database.getPlayersByTeam(selectedTeam),
       ]);
 
@@ -80,13 +87,13 @@ module.exports = {
       }
       if (isStaffSomewhere) {
         return interaction.editReply({
-          content: `❌ <@${targetUser.id}> is management staff for **${isStaffSomewhere.name}** and cannot sign as a player.`,
+          content: `❌ <@${signee.id}> is management staff for **${isStaffSomewhere.name}** and cannot sign as a player.`,
           flags: MessageFlags.Ephemeral,
         });
       }
       if (activeContract) {
         return interaction.editReply({
-          content: `❌ <@${targetUser.id}> already has a contract with **${builderHelpers.getFormattedTeamName(activeContract.teamName).toUpperCase()}**.`,
+          content: `❌ <@${signee.id}> already has a contract with **${builderHelpers.getFormattedTeamName(activeContract.teamName).toUpperCase()}**.`,
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -97,30 +104,30 @@ module.exports = {
         });
       }
 
-      const role       = await builderHelpers.getTeamRole(interaction.client, selectedTeam);
+      const role = await builderHelpers.getTeamRole(interaction.client, selectedTeam);
       const embedColor = role?.color || constants.DEFAULT_EMBED_COLOR;
 
       const contractEmbed = buildPSLEmbed(interaction.client, embedColor)
         .setTitle('📜 NEW CONTRACT OFFER!')
         .setDescription(
-          `Hello, <@${targetUser.id}>,\n\n` +
+          `Hello, <@${signee.id}>,\n\n` +
           `${formattedTeamName} has officially extended a contract offer to you for this season.\n\n` +
           `Please review and make your decision below:`,
         );
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`accept_${selectedTeam}_${targetUser.id}_${interaction.user.id}`)
+          .setCustomId(`accept_${selectedTeam}_${signee.id}_${interaction.user.id}`)
           .setLabel('🤝 Accept Contract')
           .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
-          .setCustomId(`refuse_${selectedTeam}_${targetUser.id}_${interaction.user.id}`)
+          .setCustomId(`refuse_${selectedTeam}_${signee.id}_${interaction.user.id}`)
           .setLabel('❌ Refuse')
           .setStyle(ButtonStyle.Danger),
       );
 
       try {
-        await targetUser.send({ embeds: [contractEmbed], components: [row] });
+        await signee.send({ embeds: [contractEmbed], components: [row] });
       } catch (dmError) {
         if (dmError.code === 50007 || dmError.code === 50278 || dmError.status === 403) {
           return interaction.editReply({
@@ -128,7 +135,7 @@ module.exports = {
               buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
                 .setTitle('❌ Unable to Deliver Contract')
                 .setDescription(
-                  `Could not send a Direct Message to <@${targetUser.id}>.\n\n` +
+                  `Could not send a Direct Message to <@${signee.id}>.\n\n` +
                   `Please ask them to enable **DMs from server members** in their Discord Privacy settings and try again.`,
                 ),
             ],
@@ -139,7 +146,7 @@ module.exports = {
       }
 
       return interaction.editReply({
-        content: `📨 Contract offer successfully sent to <@${targetUser.id}>'s DMs for ${formattedTeamName}!`,
+        content: `📨 Contract offer successfully sent to <@${signee.id}>'s DMs for ${formattedTeamName}!`,
         flags: MessageFlags.Ephemeral,
       });
 

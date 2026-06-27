@@ -8,13 +8,13 @@ const APP_CONFIG = {
   groupId: 151319009,
 
   discord: {
-    registeredRole: '1480572500315209870',
-    unverifiedRole: '1480574659459022890'
+    registeredRole: constants.REGISTERED_ROLE_ID,
+    unverifiedRole: constants.UNVERIFIED_ROLE_ID
   },
 
   roblox: {
-    registeredRole: { id: '655167005', name: 'Registered', rank: 1 },
-    unverifiedRole: { id: '467994038', name: 'Unverified', rank: 0 }
+    registeredRole: { id: '655167005', name: 'Registered', rank: 3 },
+    unverifiedRole: { id: '467994038', name: 'Unverified', rank: 2 }
   }
 };
 

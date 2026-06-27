@@ -1,10 +1,10 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const database       = require('../db/database');
-const constants      = require('../config/constants');
+const database = require('../db/database');
+const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
-const { buildPSLEmbed }                              = require('../utils/embed-helpers');
+const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { safeRoleAdd, safeRoleRemove, safeFetchMember } = require('../utils/discord-helpers');
-const { canManageTeam, isChairman, isTeamManager, validateGuild } = require('../utils/validations');
+const { canManageTeam, isChairman, isTeamManager, validateGuild, isRegistered } = require('../utils/validations');
 const { updateTeamsRoster } = require('../utils/roster-updater');
 
 module.exports = {
@@ -24,7 +24,7 @@ module.exports = {
         .setDescription('Select the management role')
         .setRequired(true)
         .addChoices(
-          { name: 'Manager',           value: 'manager'   },
+          { name: 'Manager', value: 'manager' },
           { name: 'Assistant Manager', value: 'assistant' },
         ),
     )
@@ -45,7 +45,7 @@ module.exports = {
 
     const selectedTeam = interaction.options.getString('team');
     const selectedRole = interaction.options.getString('role');
-    const appointee    = interaction.options.getUser('appointee');
+    const appointee = interaction.options.getMember('appointee');
 
     const teamInfo = await database.getTeamInfo(selectedTeam);
     if (!teamInfo) {
@@ -63,7 +63,7 @@ module.exports = {
     }
 
     const isAssistantAppointment = selectedRole === 'assistant';
-    const isManager              = interaction.user.id === teamInfo.manager;
+    const isManager = interaction.user.id === teamInfo.manager;
 
     if (!isChairman(interaction.member) && isManager && !isAssistantAppointment) {
       return interaction.editReply({
@@ -72,10 +72,10 @@ module.exports = {
       });
     }
 
-    const isRoleManager  = selectedRole === 'manager';
+    const isRoleManager = selectedRole === 'manager';
     const currentStaffId = isRoleManager ? teamInfo.manager : teamInfo.assistantManager;
-    const globalRoleId   = isRoleManager ? constants.MANAGER_ROLE_ID : constants.ASSISTANT_MANAGER_ROLE_ID;
-    const roleName       = isRoleManager ? 'Manager' : 'Assistant Manager';
+    const globalRoleId = isRoleManager ? constants.MANAGER_ROLE_ID : constants.ASSISTANT_MANAGER_ROLE_ID;
+    const roleName = isRoleManager ? 'Manager' : 'Assistant Manager';
 
     try {
       if (!appointee) {
@@ -97,7 +97,7 @@ module.exports = {
             const [oldMember, clearedUser, role] = await Promise.all([
               safeFetchMember(interaction.guild, currentStaffId),
               interaction.client.users.fetch(currentStaffId).catch(() => null),
-              builderHelpers.getTeamRole(interaction.client, selectedTeam),
+              builderHelpers.getTeamRole(interaction.client, selectedTeam)
             ]);
 
             if (oldMember) {
@@ -149,6 +149,13 @@ module.exports = {
       }
 
       const appointeeId = appointee.id;
+
+      if (!(await isRegistered(appointee))) {
+        return interaction.editReply({
+          content: `❌ <@${appointeeId}> has not registered themselves yet.`,
+          flags: MessageFlags.Ephemeral
+        });
+      }
 
       const [isStaffElsewhere, existingContract] = await Promise.all([
         database.isUserStaffAnywhere(appointeeId),
@@ -207,9 +214,10 @@ module.exports = {
             }
           }
 
-          const [targetMember, role] = await Promise.all([
+          const [targetMember, role, teamCapacity] = await Promise.all([
             safeFetchMember(interaction.guild, appointeeId),
             builderHelpers.getTeamRole(interaction.client, selectedTeam),
+            builderHelpers.getDisplayedPlayersAmount(selectedTeam)
           ]);
 
           if (targetMember) {
@@ -222,15 +230,20 @@ module.exports = {
           const appointmentsChannel = await interaction.client.channels
             .fetch(constants.APPOINTMENTS_CHANNEL_ID)
             .catch(() => null);
-
           if (appointmentsChannel) {
             const appointEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
               .setTitle(`${formattedTeamName} OFFICIAL APPOINTMENT`)
               .setThumbnail(appointee.displayAvatarURL({ dynamic: true }))
-              .addFields({
-                name: 'Staff Appointed',
-                value: `<@${appointeeId}> has been officially appointed as **${roleName}** for ${formattedTeamName}! 📝`,
-              });
+              .addFields(
+                {
+                  name: 'Staff Appointed',
+                  value: `<@${appointeeId}> has been officially appointed as **${roleName}** for ${formattedTeamName}! 📝`,
+                },
+                {
+                  name: 'Team Capacity',
+                  value: teamCapacity,
+                },
+              );
 
             const mentions = [`<@${appointeeId}>`, `<@${interaction.user.id}>`].join(' ');
             await appointmentsChannel.send({ content: mentions, embeds: [appointEmbed] }).catch(console.warn);

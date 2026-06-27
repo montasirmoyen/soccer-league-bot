@@ -37,6 +37,18 @@ function validateGuild(interaction) {
   return interaction.guildId === constants.GUILD_ID;
 }
 
+async function isRegistered(member) {
+  if (!member) return false;
+
+  try {
+    const fetchedMember = await member.guild.members.fetch(member.id);
+    return fetchedMember.roles.cache.has(constants.REGISTERED_ROLE_ID);
+  } catch (error) {
+    console.error(`Erro ao buscar o membro: ${error}`);
+    return false;
+  }
+}
+
 module.exports = {
   isChairman,
   isRefereeOrAdmin,
@@ -45,4 +57,5 @@ module.exports = {
   canManageTeam,
   isRosterFull,
   validateGuild,
+  isRegistered
 };

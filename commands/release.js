@@ -86,7 +86,6 @@ module.exports = {
         try {
           const targetMember = await safeFetchMember(interaction.guild, targetUser.id);
           if (targetMember) {
-            // Always strip the team membership role. If staff, also strip the global staff role.
             const rolesToRemove = [teamInfo.roleId];
             if (isStaff) rolesToRemove.push(globalStaffRoleId);
 

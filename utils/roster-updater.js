@@ -19,15 +19,15 @@ async function updateTeamsRoster(client) {
     const fields = [];
 
     for (const team of allTeams) {
-      const label = builderHelpers.getFormattedTeamName(team.name).toUpperCase();
+      const label = builderHelpers.getFormattedTeamName(team.name);
       
       const manager = team.manager ? `<@${team.manager}>` : '*Vacant*';
       const assistant = team.assistantManager ? `<@${team.assistantManager}>` : '*Vacant*';
-      const playerCount = Array.isArray(team.players) ? team.players.length : 0;
+      const teamCapacity = await builderHelpers.getDisplayedPlayersAmount(team.name);
 
       fields.push({
-        name: `${label} ${playerCount}/${constants.MAX_ROSTER_SIZE}`,
-        value: `**M.:** ${manager}\n**A.M.:** ${assistant}`,
+        name: `${label}`,
+        value: `\`[${teamCapacity}]\`\n**M.:** ${manager}\n**A.M.:** ${assistant}\n\u200b`,
         inline: true
       });
     }

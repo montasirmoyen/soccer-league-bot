@@ -8,17 +8,18 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
 } = require('discord.js');
-const { loadCommands }          = require('./bot/load-commands');
-const { registerCommands }      = require('./bot/register-commands');
-const { startHealthServer }     = require('./web/health-server');
-const database                  = require('./db/database');
-const constants                 = require('./config/constants');
-const builderHelpers            = require('./utils/builder-helpers');
-const { buildPSLEmbed }         = require('./utils/embed-helpers');
-const { safeRoleAdd }           = require('./utils/discord-helpers');
+const { loadCommands }             = require('./bot/load-commands');
+const { registerCommands }         = require('./bot/register-commands');
+const { startHealthServer }        = require('./web/health-server');
+const database                     = require('./db/database');
+const constants                    = require('./config/constants');
+const builderHelpers               = require('./utils/builder-helpers');
+const { buildPSLEmbed }            = require('./utils/embed-helpers');
+const { safeRoleAdd, safeFetchMember } = require('./utils/discord-helpers');
 const { logError, replyWithError } = require('./utils/error-handler');
 const { registerVerifierHandler }  = require('./handlers/verifier-handler');
 const { updateTeamsRoster }        = require('./utils/roster-updater');
+const guildMemberRemoveEvent       = require('./events/guild-member-remove');
 
 class UserFacingError extends Error {
   constructor(message) {
@@ -54,9 +55,9 @@ const MANAGING_COMMANDS = [
   'contract', 'emergency-sign', 'release', 'scout', 'scrim', 'appoint', 'announce',
 ];
 
-const userCooldowns     = new Map();
-const buttonCooldowns   = new Map();
-const playerOperations  = new Map();
+const userCooldowns    = new Map();
+const buttonCooldowns  = new Map();
+const playerOperations = new Map();
 
 function hasUserCooldown(userId, command) {
   const key  = `${userId}:${command}`;
@@ -169,20 +170,28 @@ async function fetchTeamStaff(teamName) {
   return { manager: manager?.manager, assistant: assistant?.assistantManager };
 }
 
-function buildStaffMentions(userId, staffManager, staffAssistant) {
-  return [
-    `<@${userId}>`,
-    staffManager  ? `<@${staffManager}>`  : null,
-    staffAssistant ? `<@${staffAssistant}>` : null,
-  ]
-    .filter(Boolean)
-    .join(' ');
+async function buildStaffMentions(guild, userId, staffManager, staffAssistant) {
+  const entries = [
+    { id: userId,        required: true  },
+    { id: staffManager,  required: false },
+    { id: staffAssistant, required: false },
+  ].filter((e) => e.id);
+
+  const results = await Promise.all(
+    entries.map(async ({ id, required }) => {
+      if (required) return `<@${id}>`;
+      const member = await safeFetchMember(guild, id);
+      return member ? `<@${id}>` : null;
+    })
+  );
+
+  return results.filter(Boolean).join(' ');
 }
 
-async function postSigningToChannel(client, signingEmbed, userId, teamManager, teamAssistant) {
+async function postSigningToChannel(client, guild, signingEmbed, userId, teamManager, teamAssistant) {
   const signingsChannel = await client.channels.fetch(constants.SIGNINGS_CHANNEL_ID).catch(() => null);
   if (signingsChannel) {
-    const mentions = buildStaffMentions(userId, teamManager, teamAssistant);
+    const mentions = await buildStaffMentions(guild, userId, teamManager, teamAssistant);
     await signingsChannel.send({ content: mentions, embeds: [signingEmbed] });
   }
 }
@@ -227,6 +236,8 @@ async function bootstrap() {
 
   registerVerifierHandler(client);
 
+  client.on(guildMemberRemoveEvent.name, (...args) => guildMemberRemoveEvent.execute(...args));
+
   setInterval(cleanupExpiredEntries, TIMERS.CLEANUP_INTERVAL_MS).unref();
 
   client.once('clientReady', () => {
@@ -235,8 +246,7 @@ async function bootstrap() {
       status:     'dnd',
       activities: [{ name: '/help', type: ActivityType.Listening }],
     });
-
-    updateTeamsRoster(client)
+    updateTeamsRoster(client);
   });
 
   client.on('interactionCreate', async (interaction) => {
@@ -432,6 +442,7 @@ async function processAcceptance(interaction, client, teamName, userId, issuerId
     if (squadSize.length >= constants.MAX_ROSTER_SIZE) {
       return failWithEmbed('❌ Signing Failed', `${formattedTeamName}'s roster has since reached its limit.`);
     }
+
     const targetMember = await guild.members.fetch(userId);
     await database.contractPlayer(userId, teamName);
 
@@ -467,9 +478,9 @@ async function processAcceptance(interaction, client, teamName, userId, issuerId
             const emergencySignsUsed =
               updatedTeamInfo?.emergencySignsUsed ?? (teamInfo?.emergencySignsUsed + 1);
             signingEmbed.addFields(
-              { name: 'Player Signed',         value: `<@${userId}> has accepted an emergency contract with ${formattedTeamName}! 🚨` },
-              { name: 'Team Capacity',          value: `**${capacityText}**` },
-              { name: 'Emergency Spots Used',   value: `**${emergencySignsUsed}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}**` }
+              { name: 'Player Signed',       value: `<@${userId}> has accepted an emergency contract with ${formattedTeamName}! 🚨` },
+              { name: 'Team Capacity',        value: `**${capacityText}**` },
+              { name: 'Emergency Spots Used', value: `**${emergencySignsUsed}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}**` }
             );
           } else {
             signingEmbed.addFields(
@@ -478,7 +489,7 @@ async function processAcceptance(interaction, client, teamName, userId, issuerId
             );
           }
 
-          await postSigningToChannel(client, signingEmbed, userId, manager, assistant);
+          await postSigningToChannel(client, guild, signingEmbed, userId, manager, assistant);
         } catch (err) {
           logError(err, { userId, teamName, action: 'POST_SIGNING_TO_CHANNEL' });
         }

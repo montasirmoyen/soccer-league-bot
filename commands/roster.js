@@ -3,6 +3,7 @@ const database = require('../db/database');
 const builderHelpers = require('../utils/builder-helpers');
 const { validateGuild } = require('../utils/validations')
 const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { safeFetchMember } = require('../utils/discord-helpers')
 const constants = require('../config/constants');
 
 module.exports = {
@@ -27,23 +28,20 @@ module.exports = {
         builderHelpers.getTeamRole(interaction.client, selectedTeam)
       ]);
 
-      const guild = interaction.guild;
+      const rawIds = contractedPlayers.map(p => p.userId);
+      if (teamInfo?.manager) rawIds.push(teamInfo.manager);
+      if (teamInfo?.assistantManager) rawIds.push(teamInfo.assistantManager);
 
-      const playerIds = contractedPlayers.map(p => p.userId).filter(Boolean);
-      if (teamInfo?.manager) playerIds.push(teamInfo.manager);
-      if (teamInfo?.assistantManager) playerIds.push(teamInfo.assistantManager);
+      await safeFetchMember(interaction.guild, rawIds);
 
-      if (playerIds.length > 0) {
-        await guild.members.fetch({ user: playerIds }).catch(() => null);
-      }
+      const toMention = (id) => id ? `<@${String(id).replace(/\D/g, '')}>` : '*Vacant*';
 
-      const managerText = teamInfo?.manager ? `<@${teamInfo.manager}>` : '*Vacant*';
-      const assistantText = teamInfo?.assistantManager ? `<@${teamInfo.assistantManager}>` : '*Vacant*';
+      const managerText = toMention(teamInfo?.manager);
+      const assistantText = toMention(teamInfo?.assistantManager);
 
       const playerLines = Array.from({ length: constants.MAX_ROSTER_SIZE }, (_, i) =>
-        contractedPlayers[i] ? `**P.:** <@${contractedPlayers[i].userId}>` : '**P.:**'
+        contractedPlayers[i] ? `**P.:** ${toMention(contractedPlayers[i].userId)}` : '**P.:**'
       );
-
 
       const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam).toUpperCase()}**`;
 

@@ -3,8 +3,8 @@ const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
-const { safeRoleRemove } = require('../utils/discord-helpers');
-const { isTeamStaff, validateGuild } = require('../utils/validations');
+const { safeRoleRemove, safeFetchMember } = require('../utils/discord-helpers');
+const { validateGuild } = require('../utils/validations');
 
 const cooldowns = new Map();
 
@@ -32,9 +32,6 @@ module.exports = {
         database.getPlayerDemandsCount(userId),
       ]);
 
-      if (teamInfo && isTeamStaff(teamInfo, userId)) {
-        return interaction.editReply({ content: '❌ Management staff cannot use the demand command.', flags: MessageFlags.Ephemeral });
-      }
       if (demandsUsed >= constants.MAX_DEMANDS_PER_SEASON) {
         return interaction.editReply({ content: `❌ **Seasonal limit reached!** You have used all ${constants.MAX_DEMANDS_PER_SEASON} demands this season.`, flags: MessageFlags.Ephemeral });
       }
@@ -58,48 +55,76 @@ module.exports = {
       cooldowns.set(userId, now);
       setTimeout(() => cooldowns.delete(userId), cooldownAmount);
 
-      await database.releasePlayer(userId);
-      const updatedHistory = await database.incrementPlayerDemand(userId);
+      const isManager = teamInfo?.manager === userId;
+      const isAssistant = teamInfo?.assistantManager === userId;
+      const isStaff = isManager || isAssistant;
+      const staffRole = isManager ? 'manager' : 'assistant';
+      const globalStaffRoleId = isManager ? constants.MANAGER_ROLE_ID : constants.ASSISTANT_MANAGER_ROLE_ID;
+      const staffRoleName = isManager ? 'Manager' : 'Assistant Manager';
 
+      if (isStaff) {
+        await database.appointStaff(playerTeam, null, staffRole);
+      }
+      await database.releasePlayer(userId);
+      
+      const updatedHistory = await database.incrementPlayerDemand(userId);
       const remainingDemands = constants.MAX_DEMANDS_PER_SEASON - updatedHistory.demandsUsed;
-      const formattedTeamName = `**${playerTeam.toUpperCase()}**`;
+      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(playerTeam).toUpperCase()}**`;
 
       interaction.editReply({
-        content: `✅ You have left ${formattedTeamName}. You have **${remainingDemands}** demand(s) remaining this season.`,
+        content: isStaff
+          ? `✅ You have left ${formattedTeamName} and your **${staffRoleName}** position has been cleared. You have **${remainingDemands}** demand(s) remaining this season.`
+          : `✅ You have left ${formattedTeamName}. You have **${remainingDemands}** demand(s) remaining this season.`,
         flags: MessageFlags.Ephemeral,
       });
 
       (async () => {
-        if (teamInfo?.roleId) {
-          safeRoleRemove(interaction.member, teamInfo.roleId).catch(console.warn);
-        }
+        try {
+          const rolesToRemove = [];
+          if (teamInfo?.roleId) rolesToRemove.push(teamInfo.roleId);
+          if (isStaff) rolesToRemove.push(globalStaffRoleId);
 
-        const releasesChannel = await interaction.client.channels.fetch(constants.RELEASES_CHANNEL_ID).catch(() => null);
-        if (releasesChannel) {
-          const [teamCapacity, teamManager, teamAssistant, role] = await Promise.all([
+          if (rolesToRemove.length > 0) {
+            await Promise.all(rolesToRemove.map((rId) => safeRoleRemove(interaction.member, rId))).catch(console.warn);
+          }
+
+          const [updatedTeamInfo, teamCapacity, role] = await Promise.all([
+            database.getTeamInfo(playerTeam),
             builderHelpers.getDisplayedPlayersAmount(playerTeam),
-            database.getTeamStaff(playerTeam, 'manager'),
-            database.getTeamStaff(playerTeam, 'assistantManager'),
             builderHelpers.getTeamRole(interaction.client, playerTeam),
           ]);
 
-          const demandEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
-            .setTitle(`${formattedTeamName} OFFICIAL DEMAND`)
-            .addFields(
-              {
-                name: 'Player Demanded Release',
-                value: `<@${userId}> has voluntarily left ${formattedTeamName} and is now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_SEASON})`,
-              },
-              { name: 'Team Capacity', value: teamCapacity }
-            );
+          const rawIds = [userId];
+          if (updatedTeamInfo?.manager) rawIds.push(updatedTeamInfo.manager);
+          if (updatedTeamInfo?.assistantManager) rawIds.push(updatedTeamInfo.assistantManager);
 
-          const mentions = [
-            `<@${userId}>`,
-            teamManager?.manager ? `<@${teamManager.manager}>` : null,
-            teamAssistant?.assistantManager ? `<@${teamAssistant.assistantManager}>` : null,
-          ].filter(Boolean).join(' ');
+          await safeFetchMember(interaction.guild, rawIds);
 
-          releasesChannel.send({ content: mentions, embeds: [demandEmbed] }).catch(console.warn);
+          const releasesChannel = await interaction.client.channels.fetch(constants.RELEASES_CHANNEL_ID).catch(() => null);
+          if (releasesChannel) {
+            const demandEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
+              .setTitle(`${formattedTeamName} OFFICIAL DEMAND`)
+              .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+              .addFields(
+                {
+                  name: isStaff ? 'Staff Demanded Release' : 'Player Demanded Release',
+                  value: isStaff
+                    ? `<@${userId}> has voluntarily left ${formattedTeamName} and their **${staffRoleName}** badge has been revoked. They are now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_SEASON})`
+                    : `<@${userId}> has voluntarily left ${formattedTeamName} and is now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_SEASON})`,
+                },
+                { name: 'Team Capacity', value: teamCapacity }
+              );
+
+            const mentions = [
+              `<@${userId}>`,
+              updatedTeamInfo?.manager ? `<@${updatedTeamInfo.manager}>` : null,
+              updatedTeamInfo?.assistantManager ? `<@${updatedTeamInfo.assistantManager}>` : null,
+            ].filter(Boolean).join(' ');
+
+            await releasesChannel.send({ content: mentions, embeds: [demandEmbed] }).catch(console.warn);
+          }
+        } catch (bgErr) {
+          console.error('[demand.js] Background demand error:', bgErr);
         }
       })();
 

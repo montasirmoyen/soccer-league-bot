@@ -114,7 +114,7 @@ module.exports = {
 
             if (appointmentsChannel) {
               const clearEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
-                .setTitle(`${formattedTeamName} OFFICIAL STAFF CLEARANCE`)
+                .setTitle(`${formattedTeamName} OFFICIAL STAFF CLEARANCE 🧹`)
                 .setDescription(
                   `The **${roleName}** position for ${formattedTeamName} has been officially vacated.`,
                 )

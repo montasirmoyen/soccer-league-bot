@@ -2,6 +2,7 @@ const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('./builder-helpers');
 const { buildPSLEmbed } = require('./embed-helpers');
+const { safeFetchMember } = require('./discord-helpers');
 
 async function updateTeamsRoster(client) {
   try {
@@ -13,6 +14,18 @@ async function updateTeamsRoster(client) {
 
     allTeams.sort((a, b) => a.name.localeCompare(b.name));
 
+    const guild = channel.guild;
+    if (guild) {
+      const allStaffIds = [];
+      for (const team of allTeams) {
+        if (team.manager) allStaffIds.push(team.manager);
+        if (team.assistantManager) allStaffIds.push(team.assistantManager);
+      }
+      if (allStaffIds.length > 0) {
+        await safeFetchMember(guild, allStaffIds);
+      }
+    }
+
     const embed = buildPSLEmbed(client, constants.DEFAULT_EMBED_COLOR)
       .setTitle('👑 PSL26 WORLD CUP TEAMS 👑');
 
@@ -21,8 +34,8 @@ async function updateTeamsRoster(client) {
     for (const team of allTeams) {
       const label = builderHelpers.getFormattedTeamName(team.name);
       
-      const manager = team.manager ? `<@${team.manager}>` : '*Vacant*';
-      const assistant = team.assistantManager ? `<@${team.assistantManager}>` : '*Vacant*';
+      const manager = team.manager ? `<@${String(team.manager).replace(/\D/g, '')}>` : '*Vacant*';
+      const assistant = team.assistantManager ? `<@${String(team.assistantManager).replace(/\D/g, '')}>` : '*Vacant*';
       const teamCapacity = await builderHelpers.getDisplayedPlayersAmount(team.name);
 
       fields.push({

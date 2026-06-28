@@ -7,7 +7,13 @@ const database = require('../db/database');
 const countryEmoji = require('country-emoji');
 
 function getTeamFlag(teamKey) {
-    return countryEmoji.flag(teamKey) || '🏳️'
+    const key = teamKey?.toLowerCase().trim();
+
+    if (key === 'england') {
+        return '🏴󠁧󠁢󠁥󠁮󠁧󠁿';
+    }
+
+    return countryEmoji.flag(teamKey) || '🏳️';
 }
 
 function getFormattedTeamName(teamKey) {

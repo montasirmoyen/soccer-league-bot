@@ -28,11 +28,36 @@ async function safeRoleRemove(member, roleId) {
   }
 }
 
-async function safeFetchMember(guild, userId) {
+async function safeFetchMember(guild, userIds) {
+  if (!guild || !userIds) return null;
+
+  const isArrayInput = Array.isArray(userIds);
+  const idsArray = isArrayInput ? userIds : [userIds];
+
+  const cleanIds = idsArray
+    .map(id => id ? String(id).replace(/\D/g, '') : null)
+    .filter(Boolean);
+
+  if (cleanIds.length === 0) return isArrayInput ? new Map() : null;
+
   try {
-    return await guild.members.fetch(userId);
-  } catch {
-    return null;
+    const fetchedMembers = await guild.members.fetch({ user: cleanIds });
+
+    if (isArrayInput) {
+      return fetchedMembers;
+    } else {
+      return fetchedMembers.get(cleanIds[0]) || null;
+    }
+  } catch (error) {
+    await Promise.allSettled(
+      cleanIds.map(id => guild.members.fetch(id).catch(() => null))
+    );
+
+    if (isArrayInput) {
+      return guild.members.cache.filter(member => cleanIds.includes(member.id));
+    } else {
+      return guild.members.cache.get(cleanIds[0]) || null;
+    }
   }
 }
 

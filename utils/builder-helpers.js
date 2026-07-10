@@ -82,6 +82,11 @@ async function getTeamRole(client, teamKey) {
     }
 }
 
+async function getDisplayedReleasesAmount(teamKey) {
+    const releasesUsed = await database.getTeamReleasesCount(teamKey);
+    return `${releasesUsed}/${constants.MAX_RELEASES_PER_TEAM}`;
+}
+
 async function getTeamPlayersAmount(teamKey) {
     const squad = await database.getPlayersByTeam(teamKey);
     return Array.isArray(squad) ? squad.length : 0;
@@ -92,6 +97,11 @@ async function getDisplayedPlayersAmount(teamKey) {
     return `${playersAmount}/${constants.MAX_ROSTER_SIZE}`;
 }
 
+async function getDisplayedPlayerSigningsAmount(userId) {
+    const signingsUsed = await database.getPlayerSigningsCount(userId);
+    return `${signingsUsed}/${constants.MAX_SIGNINGS_PER_PLAYER}`;
+}
+
 module.exports = {
     getTeamFlag,
     getFormattedTeamName,
@@ -99,6 +109,8 @@ module.exports = {
     getPositionChoices,
     getTimezoneChoices,
     getTeamRole,
+    getDisplayedReleasesAmount,
+    getDisplayedPlayerSigningsAmount,
     getTeamPlayersAmount,
     getDisplayedPlayersAmount
 };

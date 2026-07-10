@@ -17,7 +17,21 @@ module.exports = {
 
   getContractedTeam: (userId) => Contract.findOne({ userId }).exec(),
 
+  getPlayerSigningsCount: async (userId) => {
+    const history = await PlayerHistory.findOne({ userId }).exec();
+    return history ? history.signingsUsed : 0;
+  },
+
   contractPlayer: async (userId, teamName) => {
+    PlayerHistory.findOneAndUpdate(
+      { userId },
+      {
+        $inc: { signingsUsed: 1 },
+        $setOnInsert: { userId }
+      },
+      { new: true, upsert: true }
+    ).exec();
+
     const newContract = new Contract({ userId, teamName });
     return newContract.save();
   },
@@ -51,10 +65,15 @@ module.exports = {
     );
   },
 
-  incrementEmergencySign: (teamName) =>
+  getTeamReleasesCount: async (teamName) => {
+    const history = await Team.findOne({ name: teamName.toUpperCase() }).exec();
+    return history ? history.releasesUsed : 0;
+  },
+
+  incrementTeamRelease: (teamName) =>
     Team.findOneAndUpdate(
       { name: teamName.toUpperCase() },
-      { $inc: { emergencySignsUsed: 1 } },
+      { $inc: { releasesUsed: 1 } },
       { new: true }
     ),
 

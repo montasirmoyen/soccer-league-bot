@@ -1,5 +1,3 @@
-// events/guild-member-remove.js
-
 const { Events } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
@@ -15,6 +13,7 @@ module.exports = {
 
     const userId = member.user.id;
     const tag = member.user.tag;
+    const displayName = member.displayName;
     let rosterNeedsUpdate = false;
 
     try {
@@ -34,7 +33,7 @@ module.exports = {
             .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
             .addFields({
               name: 'Player Released',
-              value: `<@${userId}> has left the server and has been automatically released from ${formattedTeamName}. 📋`,
+              value: `**${displayName}** has left the server and has been automatically released from ${formattedTeamName}. 📋`,
             })
             .setTimestamp();
 
@@ -64,7 +63,7 @@ module.exports = {
               .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
               .addFields({
                 name: 'Position Cleared',
-                value: `<@${userId}> has left the server and their **${roleLabel}** position for ${formattedTeamName} has been automatically vacated. 📋`,
+                value: `**${displayName}** has left the server and their **${roleLabel}** position for ${formattedTeamName} has been automatically vacated. 📋`,
               })
               .setTimestamp();
 

@@ -130,8 +130,7 @@ module.exports = {
               }
 
               const mentions = [
-                clearedUser ? `<@${currentStaffId}>` : null,
-                `<@${interaction.user.id}>`,
+                clearedUser ? `<@${currentStaffId}>` : null
               ]
                 .filter(Boolean)
                 .join(' ');
@@ -140,8 +139,8 @@ module.exports = {
             }
 
             await updateTeamsRoster(interaction.client);
-          } catch (bgErr) {
-            console.error('[appoint.js] Background unappoint error:', bgErr);
+          } catch (backgroundError) {
+            console.error('[appoint.js] Background unappoint error:', backgroundError);
           }
         })();
 
@@ -245,13 +244,13 @@ module.exports = {
                 },
               );
 
-            const mentions = [`<@${appointeeId}>`, `<@${interaction.user.id}>`].join(' ');
+            const mentions = [`<@${appointeeId}>`].join(' ');
             await appointmentsChannel.send({ content: mentions, embeds: [appointEmbed] }).catch(console.warn);
           }
 
           await updateTeamsRoster(interaction.client);
-        } catch (bgErr) {
-          console.error('[appoint.js] Background appoint error:', bgErr);
+        } catch (backgroundError) {
+          console.error('[appoint.js] Background appoint error:', backgroundError);
         }
       })();
 

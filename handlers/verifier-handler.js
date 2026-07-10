@@ -43,8 +43,8 @@ async function sendLog(client, embed) {
   try {
     const verifyLogChannel = await client.channels.fetch(constants.VERIFICATION_LOG_CHANNEL_ID);
     if (verifyLogChannel?.isTextBased()) await verifyLogChannel.send({ embeds: [embed] }).catch(() => { });
-  } catch (err) {
-    logError(new SystemError(err.message, 'VERIFIER_SEND_LOG_FAIL'), client);
+  } catch (error) {
+    logError(new SystemError(error.message, 'VERIFIER_SEND_LOG_FAIL'), client);
   }
 }
 

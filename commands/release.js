@@ -4,7 +4,7 @@ const constants      = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed }                  = require('../utils/embed-helpers');
 const { safeRoleRemove, safeFetchMember } = require('../utils/discord-helpers');
-const { canManageTeam, validateGuild }    = require('../utils/validations');
+const { canManageTeam, isChairman, validateGuild }    = require('../utils/validations');
 const { updateTeamsRoster }               = require('../utils/roster-updater');
 
 module.exports = {
@@ -24,6 +24,7 @@ module.exports = {
     }
 
     const targetUser = interaction.options.getUser('player');
+    const userId     = targetUser.id;
 
     if (targetUser.bot) {
       return interaction.editReply({
@@ -33,21 +34,10 @@ module.exports = {
     }
 
     try {
-      const [isWindowOpen, activeContract] = await Promise.all([
-        database.getTransferWindowState(),
-        database.getContractedTeam(targetUser.id),
-      ]);
-
-      if (!isWindowOpen) {
-        return interaction.editReply({
-          content: '🔒 The transfer window is **CLOSED**. Players cannot be released right now.',
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-
+      const activeContract = await database.getContractedTeam(userId);
       if (!activeContract) {
         return interaction.editReply({
-          content: `❌ <@${targetUser.id}> is already a **Free Agent**.`,
+          content: `❌ <@${userId}> is already a **Free Agent**.`,
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -63,8 +53,16 @@ module.exports = {
         });
       }
 
-      const isManager   = teamInfo.manager          === targetUser.id;
-      const isAssistant = teamInfo.assistantManager === targetUser.id;
+      const releasesUsed = await database.getTeamReleasesCount(playerTeam);
+      if (releasesUsed >= constants.MAX_RELEASES_PER_TEAM && !isChairman(interaction.member)) {
+        return interaction.editReply({
+          content: `❌ ${formattedTeamName} has reached the maximum number of releases allowed this season.`,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      const isManager   = teamInfo.manager          === userId;
+      const isAssistant = teamInfo.assistantManager === userId;
       const isStaff     = isManager || isAssistant;
       const staffRole         = isManager ? 'manager' : 'assistant';
       const globalStaffRoleId = isManager ? constants.MANAGER_ROLE_ID : constants.ASSISTANT_MANAGER_ROLE_ID;
@@ -73,39 +71,40 @@ module.exports = {
       if (isStaff) {
         await database.appointStaff(playerTeam, null, staffRole);
       }
-      await database.releasePlayer(targetUser.id);
+      await database.releasePlayer(userId);
+      await database.incrementTeamRelease(playerTeam);
 
       await interaction.editReply({
         content: isStaff
-          ? `✅ <@${targetUser.id}> has been released from ${formattedTeamName} and their **${staffRoleName}** position has been cleared.`
-          : `✅ <@${targetUser.id}> has been released from ${formattedTeamName}.`,
+          ? `✅ <@${userId}> has been released from ${formattedTeamName} and their **${staffRoleName}** position has been cleared.`
+          : `✅ <@${userId}> has been released from ${formattedTeamName}.`,
         flags: MessageFlags.Ephemeral,
       });
 
       (async () => {
         try {
-          const targetMember = await safeFetchMember(interaction.guild, targetUser.id);
+          const targetMember = await safeFetchMember(interaction.guild, userId);
           if (targetMember) {
             const rolesToRemove = [teamInfo.roleId];
             if (isStaff) rolesToRemove.push(globalStaffRoleId);
 
             await Promise.all(rolesToRemove.map((rId) => safeRoleRemove(targetMember, rId))).catch(console.warn);
             console.log(
-              `[release.js] Stripped ${rolesToRemove.length} role(s) from ${targetUser.id}` +
+              `[release.js] Stripped ${rolesToRemove.length} role(s) from ${userId}` +
               (isStaff ? ` (including ${staffRoleName} role).` : '.'),
             );
           }
 
-          const [updatedTeamInfo, teamCapacity, role] = await Promise.all([
+          const [updatedTeamInfo, teamCapacity, releasesCapacity, role] = await Promise.all([
             database.getTeamInfo(playerTeam),
             builderHelpers.getDisplayedPlayersAmount(playerTeam),
+            builderHelpers.getDisplayedReleasesAmount(playerTeam),
             builderHelpers.getTeamRole(interaction.client, playerTeam),
           ]);
 
           const releaseChannel = await interaction.client.channels
             .fetch(constants.RELEASES_CHANNEL_ID)
             .catch(() => null);
-
           if (releaseChannel) {
             const releaseEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
               .setTitle(`${formattedTeamName} OFFICIAL RELEASE`)
@@ -114,17 +113,21 @@ module.exports = {
                 {
                   name: isStaff ? 'Staff Released' : 'Player Released',
                   value: isStaff
-                    ? `<@${targetUser.id}> has been released from ${formattedTeamName} and their **${staffRoleName}** badge has been revoked. They are now a Free Agent. 📋`
-                    : `<@${targetUser.id}> has been released from ${formattedTeamName} and is now a Free Agent. 📋`,
+                    ? `<@${userId}> has been released from ${formattedTeamName} and their **${staffRoleName}** badge has been revoked. They are now a Free Agent. 📋`
+                    : `<@${userId}> has been released from ${formattedTeamName} and is now a Free Agent. 📋`,
                 },
                 {
                   name:  'Team Capacity',
-                  value: teamCapacity,
+                  value: `**${teamCapacity}**`,
                 },
+                {
+                  name:  'Releases Used',
+                  value: `**${releasesCapacity}**`,
+                }
               );
 
             const mentions = [
-              `<@${targetUser.id}>`,
+              `<@${userId}>`,
               updatedTeamInfo?.manager          ? `<@${updatedTeamInfo.manager}>`          : null,
               updatedTeamInfo?.assistantManager  ? `<@${updatedTeamInfo.assistantManager}>` : null,
             ]
@@ -135,8 +138,8 @@ module.exports = {
           }
 
           await updateTeamsRoster(interaction.client);
-        } catch (bgErr) {
-          console.error('[release.js] Background release error:', bgErr);
+        } catch (backgroundError) {
+          console.error('[release.js] Background release error:', backgroundError);
         }
       })();
 

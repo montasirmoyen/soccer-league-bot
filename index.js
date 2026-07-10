@@ -170,9 +170,8 @@ async function fetchTeamStaff(teamName) {
   return { manager: manager?.manager, assistant: assistant?.assistantManager };
 }
 
-async function buildStaffMentions(guild, userId, staffManager, staffAssistant) {
+async function buildStaffMentions(guild, staffManager, staffAssistant) {
   const entries = [
-    { id: userId,        required: true  },
     { id: staffManager,  required: false },
     { id: staffAssistant, required: false },
   ].filter((e) => e.id);
@@ -188,10 +187,10 @@ async function buildStaffMentions(guild, userId, staffManager, staffAssistant) {
   return results.filter(Boolean).join(' ');
 }
 
-async function postSigningToChannel(client, guild, signingEmbed, userId, teamManager, teamAssistant) {
+async function postSigningToChannel(client, guild, signingEmbed, teamManager, teamAssistant) {
   const signingsChannel = await client.channels.fetch(constants.SIGNINGS_CHANNEL_ID).catch(() => null);
   if (signingsChannel) {
-    const mentions = await buildStaffMentions(guild, userId, teamManager, teamAssistant);
+    const mentions = await buildStaffMentions(guild, teamManager, teamAssistant);
     await signingsChannel.send({ content: mentions, embeds: [signingEmbed] });
   }
 }
@@ -230,6 +229,26 @@ async function bootstrap() {
   console.log('✅ Connected to MongoDB');
 
   await database.seedTeamsIfNeeded();
+
+  const allTeams = await database.getAllTeams();
+  if (!allTeams?.length) {
+    console.error('❌ No teams found in the database after seeding. Exiting.');
+    process.exit(1);
+  }
+
+  for (const team of allTeams) {
+    const players = await database.getPlayersByTeam(team.name);
+    for (const player of players) {
+      const userId = player.userId;
+      const guild  = await client.guilds.fetch(constants.GUILD_ID).catch(() => null);
+      if (!guild) continue;
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) {
+        await database.releasePlayer(userId);
+        console.log(`[index.js] Released ${userId} from ${team.name} due to leaving the guild.`);
+      }
+    }
+  }
 
   const commands = loadCommands(client);
   await registerCommands(commands);
@@ -467,6 +486,7 @@ async function processAcceptance(interaction, client, teamName, userId, issuerId
         try {
           const { manager, assistant } = await fetchTeamStaff(teamName);
           const capacityText           = await builderHelpers.getDisplayedPlayersAmount(teamName);
+          const signingsText = await builderHelpers.getDisplayedPlayerSigningsAmount(userId);
 
           const signingEmbed = buildPSLEmbed(client, embedColor).setTitle(
             isEmergency
@@ -480,16 +500,18 @@ async function processAcceptance(interaction, client, teamName, userId, issuerId
             signingEmbed.addFields(
               { name: 'Player Signed',       value: `<@${userId}> has accepted an emergency contract with ${formattedTeamName}! 🚨` },
               { name: 'Team Capacity',        value: `**${capacityText}**` },
-              { name: 'Emergency Spots Used', value: `**${emergencySignsUsed}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}**` }
+              { name: 'Emergency Contracts Used', value: `**${emergencySignsUsed}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}**` },
+              { name: 'Player Signings Used', value: `**${signingsText}**` }
             );
           } else {
             signingEmbed.addFields(
               { name: 'Player Signed', value: `<@${userId}> has officially joined ${formattedTeamName}! 🎉` },
-              { name: 'Team Capacity', value: `**${capacityText}**` }
+              { name: 'Team Capacity', value: `**${capacityText}**` },
+              { name: 'Player Signings Used', value: `**${signingsText}**` }
             );
           }
 
-          await postSigningToChannel(client, guild, signingEmbed, userId, manager, assistant);
+          await postSigningToChannel(client, guild, signingEmbed, manager, assistant);
         } catch (err) {
           logError(err, { userId, teamName, action: 'POST_SIGNING_TO_CHANNEL' });
         }

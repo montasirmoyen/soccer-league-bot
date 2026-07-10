@@ -39,6 +39,7 @@ module.exports = {
 
     const selectedTeam = interaction.options.getString('team');
     const signee = interaction.options.getMember('signee');
+    const userId = signee.id;
 
     if (signee.bot) {
       return interaction.editReply({
@@ -47,17 +48,17 @@ module.exports = {
       });
     }
 
-    const targetMember = await interaction.guild.members.fetch(signee.id).catch(() => null);
+    const targetMember = await interaction.guild.members.fetch(userId ).catch(() => null);
     if (!targetMember) {
       return interaction.editReply({
-        content: `❌ <@${signee.id}> is not currently a member of this server.`,
+        content: `❌ <@${userId }> is not currently a member of this server.`,
         flags: MessageFlags.Ephemeral,
       });
     }
 
     if (!(await isRegistered(signee))) {
       return interaction.editReply({
-        content: `❌ <@${signee.id}> has not registered themselves yet.`,
+        content: `❌ <@${userId }> has not registered themselves yet.`,
         flags: MessageFlags.Ephemeral
       });
     }
@@ -66,8 +67,8 @@ module.exports = {
       const [isWindowOpen, teamInfo, isStaffSomewhere, activeContract, currentSquad] = await Promise.all([
         database.getTransferWindowState(),
         database.getTeamInfo(selectedTeam),
-        database.isUserStaffAnywhere(signee.id),
-        database.getContractedTeam(signee.id),
+        database.isUserStaffAnywhere(userId ),
+        database.getContractedTeam(userId ),
         database.getPlayersByTeam(selectedTeam),
       ]);
 
@@ -75,7 +76,7 @@ module.exports = {
 
       if (!isWindowOpen) {
         return interaction.editReply({
-          content: '🔒 The transfer window is currently **CLOSED**. Offers cannot be sent.',
+          content: '🔒 The transfer window is currently **CLOSED**. Use `/emergency-contract` instead.',
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -87,13 +88,13 @@ module.exports = {
       }
       if (isStaffSomewhere) {
         return interaction.editReply({
-          content: `❌ <@${signee.id}> is management staff for **${isStaffSomewhere.name}** and cannot sign as a player.`,
+          content: `❌ <@${userId }> is management staff for **${isStaffSomewhere.name}** and cannot sign as a player.`,
           flags: MessageFlags.Ephemeral,
         });
       }
       if (activeContract) {
         return interaction.editReply({
-          content: `❌ <@${signee.id}> already has a contract with **${builderHelpers.getFormattedTeamName(activeContract.teamName).toUpperCase()}**.`,
+          content: `❌ <@${userId }> already has a contract with **${builderHelpers.getFormattedTeamName(activeContract.teamName).toUpperCase()}**.`,
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -103,6 +104,13 @@ module.exports = {
           flags: MessageFlags.Ephemeral,
         });
       }
+      const playerSigningsUsed = await database.getPlayerSigningsCount(userId);
+      if (playerSigningsUsed >= constants.MAX_SIGNINGS_PER_PLAYER) {
+        return interaction.editReply({
+          content: `❌ This player has reached the maximum number of signings allowed.`,
+          flags: MessageFlags.Ephemeral
+        });
+      }
 
       const role = await builderHelpers.getTeamRole(interaction.client, selectedTeam);
       const embedColor = role?.color || constants.DEFAULT_EMBED_COLOR;
@@ -110,18 +118,18 @@ module.exports = {
       const contractEmbed = buildPSLEmbed(interaction.client, embedColor)
         .setTitle('📜 NEW CONTRACT OFFER!')
         .setDescription(
-          `Hello, <@${signee.id}>,\n\n` +
+          `Hello, <@${userId }>,\n\n` +
           `${formattedTeamName} has officially extended a contract offer to you for this season.\n\n` +
           `Please review and make your decision below:`,
         );
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`accept_${selectedTeam}_${signee.id}_${interaction.user.id}`)
+          .setCustomId(`accept_${selectedTeam}_${userId }_${interaction.user.id}`)
           .setLabel('🤝 Accept Contract')
           .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
-          .setCustomId(`refuse_${selectedTeam}_${signee.id}_${interaction.user.id}`)
+          .setCustomId(`refuse_${selectedTeam}_${userId }_${interaction.user.id}`)
           .setLabel('❌ Refuse')
           .setStyle(ButtonStyle.Danger),
       );
@@ -135,7 +143,7 @@ module.exports = {
               buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
                 .setTitle('❌ Unable to Deliver Contract')
                 .setDescription(
-                  `Could not send a Direct Message to <@${signee.id}>.\n\n` +
+                  `Could not send a Direct Message to <@${userId }>.\n\n` +
                   `Please ask them to enable **DMs from server members** in their Discord Privacy settings and try again.`,
                 ),
             ],
@@ -146,7 +154,7 @@ module.exports = {
       }
 
       return interaction.editReply({
-        content: `📨 Contract offer successfully sent to <@${signee.id}>'s DMs for ${formattedTeamName}!`,
+        content: `📨 Contract offer successfully sent to <@${userId }>'s DMs for ${formattedTeamName}!`,
         flags: MessageFlags.Ephemeral,
       });
 

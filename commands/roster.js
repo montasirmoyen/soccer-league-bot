@@ -2,7 +2,7 @@ const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const database = require('../db/database');
 const builderHelpers = require('../utils/builder-helpers');
 const { validateGuild } = require('../utils/validations')
-const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { buildPSLEmbed, formatGuildMemberDisplay } = require('../utils/embed-helpers');
 const { safeFetchMember } = require('../utils/discord-helpers')
 const constants = require('../config/constants');
 
@@ -32,15 +32,27 @@ module.exports = {
       if (teamInfo?.manager) rawIds.push(teamInfo.manager);
       if (teamInfo?.assistantManager) rawIds.push(teamInfo.assistantManager);
 
-      await safeFetchMember(interaction.guild, rawIds);
+      const memberCollection = await safeFetchMember(interaction.guild, rawIds);
 
-      const toMention = (id) => id ? `<@${String(id).replace(/\D/g, '')}>` : '*Vacant*';
+      const resolveDisplayName = async (id) => {
+        if (!id) return '*Vacant*';
 
-      const managerText = toMention(teamInfo?.manager);
-      const assistantText = toMention(teamInfo?.assistantManager);
+        const cleanId = String(id).replace(/\D/g, '');
+        const cachedMember = memberCollection?.get(cleanId);
+        if (cachedMember?.displayName) return `**${cachedMember.displayName}**`;
 
-      const playerLines = Array.from({ length: constants.MAX_ROSTER_SIZE }, (_, i) =>
-        contractedPlayers[i] ? `**P.:** ${toMention(contractedPlayers[i].userId)}` : '**P.:**'
+        return formatGuildMemberDisplay(interaction.guild, id);
+      };
+
+      const managerText = await resolveDisplayName(teamInfo?.manager);
+      const assistantText = await resolveDisplayName(teamInfo?.assistantManager);
+
+      const playerLines = await Promise.all(
+        Array.from({ length: constants.MAX_ROSTER_SIZE }, async (_, i) =>
+          contractedPlayers[i]
+            ? `**P.:** ${await resolveDisplayName(contractedPlayers[i].userId)}`
+            : '**P.:**'
+        )
       );
 
       const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam).toUpperCase()}**`;

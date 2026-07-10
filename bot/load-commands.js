@@ -7,9 +7,15 @@ function loadCommands(client) {
   const commands = [];
 
   for (const file of commandFiles) {
-    const command = require(path.join(commandsPath, file));
-    commands.push(command.data.toJSON());
-    client.commands.set(command.data.name, command);
+    try {
+      const command = require(path.join(commandsPath, file));
+      if (!command?.data?.name || !command?.execute) continue;
+
+      commands.push(command.data.toJSON());
+      client.commands.set(command.data.name, command);
+    } catch (error) {
+      console.error(`[load-commands] Failed to load command ${file}:`, error.message);
+    }
   }
 
   return commands;

@@ -11,7 +11,7 @@ const cooldowns = new Map();
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('demand')
-    .setDescription(`Voluntarily leave your team contract (Limit: ${constants.MAX_DEMANDS_PER_SEASON} per season).`),
+    .setDescription(`Voluntarily leave your team contract (Limit: ${constants.MAX_DEMANDS_PER_PLAYER} per season).`),
 
   async execute(interaction) {
     if (!validateGuild(interaction)) {
@@ -32,8 +32,8 @@ module.exports = {
         database.getPlayerDemandsCount(userId),
       ]);
 
-      if (demandsUsed >= constants.MAX_DEMANDS_PER_SEASON) {
-        return interaction.editReply({ content: `❌ **Seasonal limit reached!** You have used all ${constants.MAX_DEMANDS_PER_SEASON} demands this season.`, flags: MessageFlags.Ephemeral });
+      if (demandsUsed >= constants.MAX_DEMANDS_PER_PLAYER) {
+        return interaction.editReply({ content: `❌ **Demand limit reached!** You have used all ${constants.MAX_DEMANDS_PER_PLAYER} demands this season.`, flags: MessageFlags.Ephemeral });
       }
 
       const cooldownAmount = 3 * 24 * 60 * 60 * 1000;
@@ -68,7 +68,7 @@ module.exports = {
       await database.releasePlayer(userId);
       
       const updatedHistory = await database.incrementPlayerDemand(userId);
-      const remainingDemands = constants.MAX_DEMANDS_PER_SEASON - updatedHistory.demandsUsed;
+      const remainingDemands = constants.MAX_DEMANDS_PER_PLAYER - updatedHistory.demandsUsed;
       const formattedTeamName = `**${builderHelpers.getFormattedTeamName(playerTeam).toUpperCase()}**`;
 
       interaction.editReply({
@@ -109,8 +109,8 @@ module.exports = {
                 {
                   name: isStaff ? 'Staff Demanded Release' : 'Player Demanded Release',
                   value: isStaff
-                    ? `<@${userId}> has voluntarily left ${formattedTeamName} and their **${staffRoleName}** badge has been revoked. They are now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_SEASON})`
-                    : `<@${userId}> has voluntarily left ${formattedTeamName} and is now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_SEASON})`,
+                    ? `<@${userId}> has voluntarily left ${formattedTeamName} and their **${staffRoleName}** badge has been revoked. They are now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_PLAYER})`
+                    : `<@${userId}> has voluntarily left ${formattedTeamName} and is now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_PLAYER})`,
                 },
                 { name: 'Team Capacity', value: teamCapacity }
               );
@@ -123,8 +123,8 @@ module.exports = {
 
             await releasesChannel.send({ content: mentions, embeds: [demandEmbed] }).catch(console.warn);
           }
-        } catch (bgErr) {
-          console.error('[demand.js] Background demand error:', bgErr);
+        } catch (backgroundError) {
+          console.error('[demand.js] Background demand error:', backgroundError);
         }
       })();
 

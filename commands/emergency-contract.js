@@ -7,10 +7,10 @@ const { canManageTeam, validateGuild } = require('../utils/validations');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('emergency-sign')
-    .setDescription(`Emergency signing while window is CLOSED (Limit: ${constants.MAX_EMERGENCY_SIGNS_PER_TEAM} per team).`)
+    .setName('emergency-contract')
+    .setDescription(`Emergency contract while window is CLOSED (Limit: ${constants.MAX_EMERGENCY_SIGNS_PER_TEAM} per team).`)
     .addStringOption((option) =>
-      option.setName('team').setDescription('Select the national team').setRequired(true)
+      option.setName('team').setDescription('Select the team').setRequired(true)
         .addChoices(builderHelpers.getTeamChoices())
     )
     .addUserOption((option) =>
@@ -24,6 +24,7 @@ module.exports = {
 
     const selectedTeam = interaction.options.getString('team');
     const targetUser = interaction.options.getUser('player');
+    const userId = targetUser.id;
 
     if (targetUser.bot) {
       return interaction.editReply({ content: '❌ You cannot sign a bot.', flags: MessageFlags.Ephemeral });
@@ -33,8 +34,8 @@ module.exports = {
       const [isWindowOpen, teamInfo, isStaffSomewhere, activeContract, currentSquad] = await Promise.all([
         database.getTransferWindowState(),
         database.getTeamInfo(selectedTeam),
-        database.isUserStaffAnywhere(targetUser.id),
-        database.getContractedTeam(targetUser.id),
+        database.isUserStaffAnywhere(userId),
+        database.getContractedTeam(userId),
         database.getPlayersByTeam(selectedTeam)
       ]);
 
@@ -53,31 +54,38 @@ module.exports = {
         return interaction.editReply({ content: `❌ Roster full (${constants.MAX_ROSTER_SIZE}/${constants.MAX_ROSTER_SIZE}).`, flags: MessageFlags.Ephemeral });
       }
       if (isStaffSomewhere) {
-        return interaction.editReply({ content: `❌ <@${targetUser.id}> is management staff for **${isStaffSomewhere.name}** and cannot sign as a player.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ <@${userId}> is management staff for **${isStaffSomewhere.name}** and cannot sign as a player.`, flags: MessageFlags.Ephemeral });
       }
       if (activeContract) {
-        return interaction.editReply({ content: `❌ <@${targetUser.id}> already has a contract with **${activeContract.teamName}**.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ <@${userId}> already has a contract with **${activeContract.teamName}**.`, flags: MessageFlags.Ephemeral });
+      }
+      const playerSigningsUsed = await database.getPlayerSigningsCount(userId);
+      if (playerSigningsUsed >= constants.MAX_SIGNINGS_PER_PLAYER) {
+        return interaction.editReply({
+          content: `❌ This player has reached the maximum number of signings allowed.`,
+          flags: MessageFlags.Ephemeral
+        });
       }
 
       const role = await builderHelpers.getTeamRole(interaction.client, selectedTeam);
-      const emergencySignEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
+      const emergencyContractEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
         .setTitle('🚨 EMERGENCY CONTRACT OFFER!')
-        .setDescription(`Hello <@${targetUser.id}>,\n${formattedTeamName} has sent you an **Emergency Contract** while the window is closed.\n\nReview and make your choice below:`);
+        .setDescription(`Hello <@${userId}>,\n${formattedTeamName} has sent you an **Emergency Contract** while the window is closed.\n\nReview and make your choice below:`);
 
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`emergencyaccept_${selectedTeam}_${targetUser.id}_${interaction.user.id}`).setLabel('🤝 Accept Emergency').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`emergencyrefuse_${selectedTeam}_${targetUser.id}_${interaction.user.id}`).setLabel('❌ Refuse').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`emergencyaccept_${selectedTeam}_${userId}_${interaction.user.id}`).setLabel('🤝 Accept Emergency').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`emergencyrefuse_${selectedTeam}_${userId}_${interaction.user.id}`).setLabel('❌ Refuse').setStyle(ButtonStyle.Danger)
       );
 
-      await targetUser.send({ embeds: [emergencySignEmbed], components: [row] });
+      await targetUser.send({ embeds: [emergencyContractEmbed], components: [row] });
 
-      return interaction.editReply({ content: `📨 Emergency offer sent to <@${targetUser.id}> for ${formattedTeamName}! (${teamInfo?.emergencySignsUsed ?? 0}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM} used)`, flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ content: `📨 Emergency offer sent to <@${userId}> for ${formattedTeamName}! (${teamInfo?.emergencySignsUsed ?? 0}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM} used)`, flags: MessageFlags.Ephemeral });
 
     } catch (error) {
       if (error.code === 50007) {
-        return interaction.editReply({ content: `❌ Could not send the offer. <@${targetUser.id}> likely has DMs closed.`, flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: `❌ Could not send the offer. <@${userId}> likely has DMs closed.`, flags: MessageFlags.Ephemeral });
       }
-      console.error('❌ Error in /emergencysign:', error);
+      console.error('❌ Error in /emergency-contract:', error);
       return interaction.editReply({ content: '❌ Error processing emergency offer.', flags: MessageFlags.Ephemeral });
     }
   },

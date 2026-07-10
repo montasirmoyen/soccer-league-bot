@@ -134,7 +134,7 @@ module.exports = {
       await Team.insertMany(teamsToCreate);
       console.log('✅ [Seed] All 24 national teams registered.');
     } catch (error) {
-      logError(error, { context: 'DB_SEEDING' });
+      logError(error, null, { context: 'DB_SEEDING' });
     }
   },
 };

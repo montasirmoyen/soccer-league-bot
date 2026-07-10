@@ -22,42 +22,47 @@ class SystemError extends AppError {
   }
 }
 
+function normalizeError(error) {
+  if (error instanceof Error) return error;
+  return new Error(typeof error === 'string' ? error : 'Unknown error occurred');
+}
+
 async function logError(error, client = null, metadata = {}) {
+  const normalizedError = normalizeError(error);
   const timestamp = new Date().toISOString();
-  const context = error.context || 'UNEXPECTED_FATAL_ERROR';
-  
-  const isCritical = error.isCritical !== undefined ? error.isCritical : true; 
+  const context = normalizedError.context || metadata.context || 'UNEXPECTED_FATAL_ERROR';
+  const isCritical = normalizedError.isCritical !== undefined ? normalizedError.isCritical : true;
   const severity = isCritical ? '🔴 CRITICAL' : '🟡 WARNING';
-  
+
   console.log(`\n[${timestamp}] ${severity} [${context}]`);
-  console.log(`📝 Description: ${error.message || 'No description provided.'}`);
-  
+  console.log(`📝 Description: ${normalizedError.message || 'No description provided.'}`);
+
   if (Object.keys(metadata).length > 0) {
-    console.log(`🔍 Metadata:`, JSON.stringify(metadata, null, 2));
+    console.log('🔍 Metadata:', JSON.stringify(metadata, null, 2));
   }
 
-  if (isCritical || !(error instanceof AppError)) {
-    console.log(`🛠️ Stack Trace:\n${error.stack}`);
+  if (isCritical || !(normalizedError instanceof AppError)) {
+    console.log(`🛠️ Stack Trace:\n${normalizedError.stack || 'No stack trace available.'}`);
   }
   console.log('-'.repeat(50));
 
-  if (!client || !isCritical || !constants.BOT_ISSUES_LOG_CHANNEL_ID) return;
+  if (!client || !constants.BOT_ISSUES_LOG_CHANNEL_ID) return;
 
   try {
     const errorChannel = await client.channels.fetch(constants.BOT_ISSUES_LOG_CHANNEL_ID).catch(() => null);
-    if (!errorChannel) return;
+    if (!errorChannel?.isTextBased?.()) return;
 
     const embed = buildPSLEmbed(client, isCritical ? constants.ERROR_COLOR : constants.WARNING_COLOR)
       .setTitle(`${severity} Error: ${context}`)
-      .setDescription(`**Message:**\n\`\`\`${error.message}\`\`\``)
+      .setDescription(`**Message:**\n\`\`\`${normalizedError.message}\`\`\``);
 
     if (Object.keys(metadata).length > 0) {
       embed.addFields({ name: 'Metadata', value: `\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\`` });
     }
 
-    if (error.stack) {
-      const truncatedStack = error.stack.substring(0, 1000);
-      embed.addFields({ name: 'Stack Trace', value: `\`\`\`js\n${truncatedStack}...\n\`\`\`` });
+    if (normalizedError.stack) {
+      const truncatedStack = normalizedError.stack.substring(0, 1000);
+      embed.addFields({ name: 'Stack Trace', value: `\`\`\`js\n${truncatedStack}${truncatedStack.length >= 1000 ? '...' : ''}\n\`\`\`` });
     }
 
     await errorChannel.send({ embeds: [embed] });
@@ -68,8 +73,8 @@ async function logError(error, client = null, metadata = {}) {
 
 async function replyWithError(interaction, error) {
   try {
-    const userMessage = error instanceof UserActionError 
-      ? `⚠️ ${error.message}` 
+    const userMessage = error instanceof UserActionError
+      ? `⚠️ ${error.message}`
       : '❌ An internal system error has occurred. Our technical team has already been notified.';
 
     if (interaction.replied || interaction.deferred) {
@@ -87,5 +92,5 @@ module.exports = {
   UserActionError,
   SystemError,
   logError,
-  replyWithError
+  replyWithError,
 };

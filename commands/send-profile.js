@@ -1,5 +1,4 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const database = require('../db/database');
 const constants = require('../config/constants');
 const { getPositionChoices, getTimezoneChoices } = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
@@ -42,6 +41,7 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     const user = interaction.user;
+    const displayName = user.displayName;
 
     const position = interaction.options.getString('position');
     const region = interaction.options.getString('region');
@@ -49,13 +49,6 @@ module.exports = {
     const summary = interaction.options.getString('summary') || 'No summary provided.';
 
     try {
-      const isStaff = await database.isUserStaffAnywhere(userId);
-      if (isStaff) {
-        return interaction.editReply({ 
-          content: '❌ Management staff cannot register as free agents.' 
-        });
-      }
-
       const cooldownAmount = 3 * 24 * 60 * 60 * 1000;
       const now = Date.now();
 
@@ -79,7 +72,7 @@ module.exports = {
       const profileEmbed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
         .setTitle('📝 Player Profile Registered')
         .setThumbnail(user.displayAvatarURL({ dynamic: true }))
-        .setDescription(`⚽ <@${userId}> is now looking forward for new experiences!\n\nManagers can offer a contract using \`/contract\``)
+        .setDescription(`⚽ **${displayName}** is now looking forward for new experiences!\n\nManagers can offer a contract using \`/contract\``)
         .addFields(
           { name: '🏃 Preferred Position', value: position, inline: true },
           { name: '🌐 Region / Timezone', value: region, inline: true },

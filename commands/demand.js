@@ -18,6 +18,7 @@ module.exports = {
       return interaction.editReply({ content: '❌ You can only execute this command in the official server.', flags: MessageFlags.Ephemeral });
     }
 
+    const displayName = interaction.member.displayName;
     const userId = interaction.user.id;
 
     try {
@@ -69,7 +70,7 @@ module.exports = {
       
       const updatedHistory = await database.incrementPlayerDemand(userId);
       const remainingDemands = constants.MAX_DEMANDS_PER_PLAYER - updatedHistory.demandsUsed;
-      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(playerTeam).toUpperCase()}**`;
+      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(playerTeam)}**`;
 
       interaction.editReply({
         content: isStaff
@@ -109,14 +110,13 @@ module.exports = {
                 {
                   name: isStaff ? 'Staff Demanded Release' : 'Player Demanded Release',
                   value: isStaff
-                    ? `<@${userId}> has voluntarily left ${formattedTeamName} and their **${staffRoleName}** badge has been revoked. They are now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_PLAYER})`
-                    : `<@${userId}> has voluntarily left ${formattedTeamName} and is now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_PLAYER})`,
+                    ? `**${displayName}** has voluntarily left ${formattedTeamName} and their **${staffRoleName}** badge has been revoked. They are now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_PLAYER})`
+                    : `**${displayName}** has voluntarily left ${formattedTeamName} and is now a Free Agent! 📝\n(**Demands remaining: ${remainingDemands}**/${constants.MAX_DEMANDS_PER_PLAYER})`,
                 },
                 { name: 'Team Capacity', value: teamCapacity }
               );
 
             const mentions = [
-              `<@${userId}>`,
               updatedTeamInfo?.manager ? `<@${updatedTeamInfo.manager}>` : null,
               updatedTeamInfo?.assistantManager ? `<@${updatedTeamInfo.assistantManager}>` : null,
             ].filter(Boolean).join(' ');

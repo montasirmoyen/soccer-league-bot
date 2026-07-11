@@ -52,7 +52,7 @@ module.exports = {
       return interaction.editReply({ content: '❌ Team not found.', flags: MessageFlags.Ephemeral });
     }
 
-    const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam).toUpperCase()}**`;
+    const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam)}**`;
 
     if (!canManageTeam(interaction.member, teamInfo)) {
       return interaction.editReply({ content: '❌ Unauthorized.', flags: MessageFlags.Ephemeral });
@@ -74,6 +74,7 @@ module.exports = {
 
     const isRoleManager = selectedRole === 'manager';
     const currentStaffId = isRoleManager ? teamInfo.manager : teamInfo.assistantManager;
+    const currentStaffDisplayName = currentStaffId ? (await safeFetchMember(interaction.guild, currentStaffId))?.displayName : '*Vacant*';
     const globalRoleId = isRoleManager ? constants.MANAGER_ROLE_ID : constants.ASSISTANT_MANAGER_ROLE_ID;
     const roleName = isRoleManager ? 'Manager' : 'Assistant Manager';
 
@@ -115,13 +116,10 @@ module.exports = {
             if (appointmentsChannel) {
               const clearEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
                 .setTitle(`${formattedTeamName} OFFICIAL STAFF CLEARANCE 🧹`)
-                .setDescription(
-                  `The **${roleName}** position for ${formattedTeamName} has been officially vacated.`,
-                )
                 .addFields({
                   name: 'Position Cleared',
                   value: clearedUser
-                    ? `<@${currentStaffId}> has been removed from the **${roleName}** role for ${formattedTeamName}. Their team badge and staff role have been revoked. 📋`
+                    ? `**${currentStaffDisplayName}** has been removed from the **${roleName}** role for ${formattedTeamName}. Their team badge and staff role have been revoked. 📋`
                     : `The **${roleName}** position has been cleared and all associated roles have been revoked. 📋`,
                 });
 
@@ -130,7 +128,8 @@ module.exports = {
               }
 
               const mentions = [
-                clearedUser ? `<@${currentStaffId}>` : null
+                clearedUser ? `<@${currentStaffId}>` : null,
+                `<@&${teamInfo.roleId}>`
               ]
                 .filter(Boolean)
                 .join(' ');
@@ -147,6 +146,7 @@ module.exports = {
         return;
       }
 
+      const displayName = appointee.displayName;
       const appointeeId = appointee.id;
 
       if (!(await isRegistered(appointee))) {
@@ -183,7 +183,7 @@ module.exports = {
       }
 
       if (existingContract && existingContract.teamName !== selectedTeam) {
-        const otherTeam = builderHelpers.getFormattedTeamName(existingContract.teamName).toUpperCase();
+        const otherTeam = builderHelpers.getFormattedTeamName(existingContract.teamName);
         return interaction.editReply({
           content: `❌ <@${appointeeId}> is a registered player for **${otherTeam}**.`,
           flags: MessageFlags.Ephemeral
@@ -236,7 +236,7 @@ module.exports = {
               .addFields(
                 {
                   name: 'Staff Appointed',
-                  value: `<@${appointeeId}> has been officially appointed as **${roleName}** for ${formattedTeamName}! 📝`,
+                  value: `**${displayName}** has been officially appointed as **${roleName}** for ${formattedTeamName}! 📝`,
                 },
                 {
                   name: 'Team Capacity',
@@ -244,7 +244,7 @@ module.exports = {
                 },
               );
 
-            const mentions = [`<@${appointeeId}>`].join(' ');
+            const mentions = [`<@${appointeeId}>`, `<@&${teamInfo.roleId}>`].join(' ');
             await appointmentsChannel.send({ content: mentions, embeds: [appointEmbed] }).catch(console.warn);
           }
 

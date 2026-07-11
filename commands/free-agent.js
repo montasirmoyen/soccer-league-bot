@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
-const { getPositionChoices, getTimezoneChoices } = require('../utils/builder-helpers');
+const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 const cooldowns = new Map();
@@ -15,18 +15,19 @@ module.exports = {
         .setName('position')
         .setDescription('Your preferred position')
         .setRequired(true)
-        .addChoices(getPositionChoices()) 
+        .addChoices(builderHelpers.getPositionChoices())
     )
     .addStringOption((option) =>
       option
         .setName('region')
         .setDescription('Your timezone/region')
         .setRequired(true)
-        .addChoices(getTimezoneChoices())
+        .addChoices(builderHelpers.getTimezoneChoices())
     ),
 
   async execute(interaction) {
     const user = interaction.user;
+    const displayName = user.displayName;
     const userId = user.id;
     const position = interaction.options.getString('position');
     const region = interaction.options.getString('region');
@@ -36,15 +37,11 @@ module.exports = {
     try {
       const contract = await database.getContractedTeam(userId);
       if (contract) {
+        const formattedTeamName = builderHelpers.getFormattedTeamName(contract.teamName);
         return interaction.editReply({
-          content: `❌ You are already contracted to **${contract.teamName}**.`,
+          content: `❌ You are already contracted to **${formattedTeamName}**.`,
           flags: MessageFlags.Ephemeral
         });
-      }
-
-      const isStaff = await database.isUserStaffAnywhere(userId);
-      if (isStaff) {
-        return interaction.editReply({ content: '❌ Management staff cannot register as free agents.', flags: MessageFlags.Ephemeral });
       }
 
       const cooldownAmount = 3 * 24 * 60 * 60 * 1000;
@@ -71,7 +68,7 @@ module.exports = {
       const embed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
         .setTitle('🏃 Free Agent Registration')
         .setDescription(
-          `<@${userId}> has registered as a free agent!\n\n` +
+          `**${displayName}** has registered as a free agent!\n\n` +
           `📍 **Position**: ${position}\n` +
           `🌍 **Region**: ${region}\n\n` +
           `Managers can send contracts to this player using \`/contract\``

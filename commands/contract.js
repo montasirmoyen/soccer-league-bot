@@ -72,7 +72,7 @@ module.exports = {
         database.getPlayersByTeam(selectedTeam),
       ]);
 
-      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam).toUpperCase()}**`;
+      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam)}**`;
 
       if (!isWindowOpen) {
         return interaction.editReply({
@@ -94,7 +94,7 @@ module.exports = {
       }
       if (activeContract) {
         return interaction.editReply({
-          content: `❌ <@${userId }> already has a contract with **${builderHelpers.getFormattedTeamName(activeContract.teamName).toUpperCase()}**.`,
+          content: `❌ <@${userId }> already has a contract with **${builderHelpers.getFormattedTeamName(activeContract.teamName)}**.`,
           flags: MessageFlags.Ephemeral,
         });
       }

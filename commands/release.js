@@ -23,7 +23,8 @@ module.exports = {
       });
     }
 
-    const targetUser = interaction.options.getUser('player');
+    const targetUser = interaction.options.getMember('player');
+    const displayName = targetUser.displayName;
     const userId     = targetUser.id;
 
     if (targetUser.bot) {
@@ -37,14 +38,14 @@ module.exports = {
       const activeContract = await database.getContractedTeam(userId);
       if (!activeContract) {
         return interaction.editReply({
-          content: `❌ <@${userId}> is already a **Free Agent**.`,
+          content: `❌ **${displayName}** is already a **Free Agent**.`,
           flags: MessageFlags.Ephemeral,
         });
       }
 
       const playerTeam        = activeContract.teamName;
       const teamInfo          = await database.getTeamInfo(playerTeam);
-      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(playerTeam).toUpperCase()}**`;
+      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(playerTeam)}**`;
 
       if (!canManageTeam(interaction.member, teamInfo)) {
         return interaction.editReply({
@@ -53,7 +54,7 @@ module.exports = {
         });
       }
 
-      const releasesUsed = await database.getTeamReleasesCount(playerTeam);
+      const releasesUsed = teamInfo.releasesUsed || 0;
       if (releasesUsed >= constants.MAX_RELEASES_PER_TEAM && !isChairman(interaction.member)) {
         return interaction.editReply({
           content: `❌ ${formattedTeamName} has reached the maximum number of releases allowed this season.`,
@@ -76,8 +77,8 @@ module.exports = {
 
       await interaction.editReply({
         content: isStaff
-          ? `✅ <@${userId}> has been released from ${formattedTeamName} and their **${staffRoleName}** position has been cleared.`
-          : `✅ <@${userId}> has been released from ${formattedTeamName}.`,
+          ? `✅ **${displayName}** has been released from ${formattedTeamName} and their **${staffRoleName}** position has been cleared.`
+          : `✅ **${displayName}** has been released from ${formattedTeamName}.`,
         flags: MessageFlags.Ephemeral,
       });
 
@@ -113,8 +114,8 @@ module.exports = {
                 {
                   name: isStaff ? 'Staff Released' : 'Player Released',
                   value: isStaff
-                    ? `<@${userId}> has been released from ${formattedTeamName} and their **${staffRoleName}** badge has been revoked. They are now a Free Agent. 📋`
-                    : `<@${userId}> has been released from ${formattedTeamName} and is now a Free Agent. 📋`,
+                    ? `**${displayName}** has been released from ${formattedTeamName} and their **${staffRoleName}** badge has been revoked. They are now a Free Agent. 📋`
+                    : `**${displayName}** has been released from ${formattedTeamName} and is now a Free Agent. 📋`,
                 },
                 {
                   name:  'Team Capacity',
@@ -127,7 +128,7 @@ module.exports = {
               );
 
             const mentions = [
-              `<@${userId}>`,
+              `**<@${userId}>**`,
               updatedTeamInfo?.manager          ? `<@${updatedTeamInfo.manager}>`          : null,
               updatedTeamInfo?.assistantManager  ? `<@${updatedTeamInfo.assistantManager}>` : null,
             ]

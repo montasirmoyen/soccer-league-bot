@@ -25,8 +25,16 @@ module.exports = {
 
         const releasesChannel = await member.client.channels.fetch(constants.RELEASES_CHANNEL_ID).catch(() => null);
         if (releasesChannel) {
-          const role = await builderHelpers.getTeamRole(member.client, activeContract.teamName).catch(() => null);
+          const [teamInfo, role] = await Promise.all([
+            database.getTeamInfo(activeContract.teamName).catch(() => null),
+            builderHelpers.getTeamRole(member.client, activeContract.teamName).catch(() => null)
+          ]);
           const formattedTeamName = `**${builderHelpers.getFormattedTeamName(activeContract.teamName).toUpperCase()}**`;
+          const staffMentions = [
+            teamInfo?.manager ? `<@${teamInfo.manager}>` : null,
+            teamInfo?.assistantManager ? `<@${teamInfo.assistantManager}>` : null,
+          ].filter(Boolean);
+          const mentionContent = staffMentions.length > 0 ? staffMentions.join(' ') : null;
 
           const embed = buildPSLEmbed(member.client, role?.color || constants.DEFAULT_EMBED_COLOR)
             .setTitle(`${formattedTeamName} AUTOMATIC RELEASE`)
@@ -37,7 +45,7 @@ module.exports = {
             })
             .setTimestamp();
 
-          await releasesChannel.send({ embeds: [embed] }).catch(console.warn);
+          await releasesChannel.send({ content: mentionContent || undefined, embeds: [embed] }).catch(console.warn);
         }
       }
 
@@ -57,6 +65,12 @@ module.exports = {
           if (appointmentsChannel) {
             const role = await builderHelpers.getTeamRole(member.client, staffPosition.name).catch(() => null);
             const formattedTeamName = `**${builderHelpers.getFormattedTeamName(staffPosition.name).toUpperCase()}**`;
+            const staffMentions = [
+              teamInfo.manager ? `<@${teamInfo.manager}>` : null,
+              teamInfo.assistantManager ? `<@${teamInfo.assistantManager}>` : null,
+              teamInfo.roleId ? `<@&${teamInfo.roleId}>` : null,
+            ].filter(Boolean);
+            const mentionContent = staffMentions.length > 0 ? staffMentions.join(' ') : null;
 
             const embed = buildPSLEmbed(member.client, role?.color || constants.DEFAULT_EMBED_COLOR)
               .setTitle(`${formattedTeamName} AUTOMATIC STAFF CLEARANCE`)
@@ -67,7 +81,7 @@ module.exports = {
               })
               .setTimestamp();
 
-            await appointmentsChannel.send({ embeds: [embed] }).catch(console.warn);
+            await appointmentsChannel.send({ content: mentionContent || undefined, embeds: [embed] }).catch(console.warn);
           }
         }
       }

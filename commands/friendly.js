@@ -1,10 +1,8 @@
 const { SlashCommandBuilder } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
+const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
-
-const regions = ['GMT', 'BST', 'EST', 'CST', 'PST', 'IST', 'OTHER'];
-const types = ['DM TO PLAY', 'IN GAME ALREADY', 'PING TO PLAY'];
 
 const cooldowns = new Map();
 const COOLDOWN_TIME = 30 * 60 * 1000;
@@ -18,23 +16,24 @@ module.exports = {
         .setName('region')
         .setDescription('Your region')
         .setRequired(true)
-        .addChoices(...regions.map((r) => ({ name: r, value: r })))
+        .addChoices(builderHelpers.getTimezoneChoices())
     )
     .addStringOption((option) =>
       option
         .setName('type')
         .setDescription('Type of friendly')
         .setRequired(true)
-        .addChoices(...types.map((t) => ({ name: t, value: t })))
+        .addChoices(builderHelpers.getFriendlyChoices())
     )
     .addAttachmentOption((option) =>
       option
         .setName('image')
-        .setDescription('Upload an image (required if IN GAME ALREADY)')
+        .setDescription('Upload an image (required if already IN-GAME)')
         .setRequired(false)
     ),
 
   async execute(interaction) {
+    const displayName = interaction.user.displayName;
     const userId = interaction.user.id;
     const now = Date.now();
 
@@ -56,15 +55,9 @@ module.exports = {
     const type = interaction.options.getString('type');
     const image = interaction.options.getAttachment('image');
 
-    if (type === 'IN GAME ALREADY' && !image) {
+    if (type === 'IN-GAME' && !image) {
       return interaction.editReply({
-        content: '❌ You must upload an image when type is "IN GAME ALREADY".',
-        ephemeral: true,
-      });
-    }
-    if (type === 'DM TO PLAY' && image) {
-      return interaction.editReply({
-        content: '❌ You cannot upload an image when type is "DM TO PLAY".',
+        content: '❌ You must upload an image when type is "IN-GAME".',
         ephemeral: true,
       });
     }
@@ -86,31 +79,27 @@ module.exports = {
         embed.setTitle(`**${staffRecord.name}** is Looking for a Match!`)
           .addFields(
             { name: 'Region', value: region, inline: true },
-            { name: 'Status', value: type === 'IN GAME ALREADY' ? 'In Game' : 'DM to Play', inline: true },
+            { name: 'Status', value: type === 'IN-GAME' ? 'In Game' : 'DM to Play', inline: true },
             {
               name: 'Info',
-              value: type === 'DM TO PLAY'
-                ? `DM <@${userId}> if you want to friendly!`
-                : 'Team is in a server waiting to friendly!',
+              value: type === 'DM' ? `DM **${displayName}** if you want to friendly!` : 'Team is in a server waiting to friendly!',
               inline: false,
             }
           );
       } else {
-        embed.setTitle(`${displayName} is Looking for a Friendly!`)
+        embed.setTitle(`**${displayName}** is Looking for a Friendly!`)
           .addFields(
             { name: 'Region', value: region, inline: true },
-            { name: 'Status', value: type === 'IN GAME ALREADY' ? 'In Game' : 'DM to Play', inline: true },
+            { name: 'Status', value: type === 'IN-GAME' ? 'In Game' : 'DM to Play', inline: true },
             {
               name: 'Info',
-              value: type === 'DM TO PLAY'
-                ? `DM <@${userId}> if you want to friendly!`
-                : 'Team is in a server waiting to friendly!',
+              value: type === 'DM' ? `DM **${displayName}** if you want to friendly!` : 'Team is in a server waiting to friendly!',
               inline: false,
             }
           );
       }
 
-      if (type === 'IN GAME ALREADY' && image) {
+      if (type === 'IN-GAME' && image) {
         embed.setImage(image.url);
       }
 

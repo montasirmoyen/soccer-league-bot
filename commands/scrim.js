@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const constants = require('../config/constants');
+const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 const {
@@ -19,25 +20,26 @@ module.exports = {
     .addStringOption((option) =>
       option
         .setName('name')
-        .setDescription('What is the name of the server? Type :sinfo in-game to find it.')
+        .setDescription('What is the name of the server?')
         .setRequired(true)
     )
     .addStringOption((option) =>
       option
         .setName('region')
-        .setDescription('What is the region of the server? Type :sinfo in-game to find it.')
+        .setDescription('What is the region of the server?')
         .setRequired(true)
+        .addChoices(builderHelpers.getTimezoneChoices())
     )
     .addStringOption((option) =>
       option
         .setName('code')
-        .setDescription('OPTIONAL: Is there a code to enter the server?')
+        .setDescription('Is there a code to enter the server?')
         .setRequired(false)
     )
     .addAttachmentOption((option) =>
       option
         .setName('sinfo')
-        .setDescription('OPTIONAL: Screenshot of server info gui.')
+        .setDescription('Screenshot of server info gui.')
         .setRequired(false)
     ),
 
@@ -95,8 +97,8 @@ module.exports = {
         .addFields({
           name: '\u200b',
           value:
-            '[Click here to join!](https://www.roblox.com/games/88920112778598/Pure-Soccer)\nTo stop receiving pings, remove your react here: https://discord.com/channels/1384782138725105715/1391925457074524222',
-          inline: false,
+            '[Click here to join!](https://www.roblox.com/games/88920112778598/Pure-Soccer)',
+          inline: false
         });
 
       if (sinfoImage) {

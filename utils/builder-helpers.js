@@ -2,6 +2,7 @@ const { Client } = require('discord.js');
 const configTeams = require('../config/teams');
 const configPositions = require('../config/positions')
 const configTimezones = require('../config/timezones')
+const configFriendlies = require('../config/friendlies')
 const constants = require('../config/constants');
 const database = require('../db/database');
 const countryEmoji = require('country-emoji');
@@ -22,7 +23,6 @@ function getFormattedTeamName(teamKey) {
         .split(' ')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
-
     const teamFlag = getTeamFlag(teamKey)
 
     return `${teamFlag} ${formattedName}`;
@@ -66,6 +66,17 @@ function getTimezoneChoices() {
     });
 }
 
+function getFriendlyChoices() {
+    const friendlyKeys = Object.keys(configFriendlies.friendlies);
+    return friendlyKeys.map(friendly => {
+        const emoji = configFriendlies.friendlies[friendly].EMOJI;
+        return {
+            name: `${emoji} ${friendly}`,
+            value: friendly
+        };
+    });
+}
+
 async function getTeamRole(client, teamKey) {
     const teamInfo = configTeams.teams[teamKey];
     if (!teamInfo || !teamInfo.ROLE_ID) return null;
@@ -83,7 +94,8 @@ async function getTeamRole(client, teamKey) {
 }
 
 async function getDisplayedReleasesAmount(teamKey) {
-    const releasesUsed = await database.getTeamReleasesCount(teamKey);
+    const teamInfo = await database.getTeamInfo(teamKey);
+    const releasesUsed = teamInfo.releasesUsed || 0;
     return `${releasesUsed}/${constants.MAX_RELEASES_PER_TEAM}`;
 }
 
@@ -108,6 +120,7 @@ module.exports = {
     getTeamChoices,
     getPositionChoices,
     getTimezoneChoices,
+    getFriendlyChoices,
     getTeamRole,
     getDisplayedReleasesAmount,
     getDisplayedPlayerSigningsAmount,

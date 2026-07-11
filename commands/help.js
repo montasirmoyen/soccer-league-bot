@@ -112,11 +112,6 @@ module.exports = {
           name: '🪟 `/transfer-window [open/close]`',
           value: '**Purpose:** Toggle transfer window status\n**Effect:** Controls if teams can send contracts\n**CLOSED:** Can only use `/emergencysign` (limited)\n**OPEN:** Can use `/contract` freely',
           inline: false,
-        },
-        {
-          name: '📋 `/update-teams`',
-          value: '**Purpose:** Refresh the master teams embed in #teams\n**Requirements:** Chairman / Overseer\n**Result:** All 24 teams displayed with live roster counts',
-          inline: false,
         }
       );
 

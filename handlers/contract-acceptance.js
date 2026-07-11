@@ -95,7 +95,7 @@ function createContractAcceptanceHandler(dependencies) {
 
       await issuer.send({ embeds: [responseEmbed] });
     } catch (dmError) {
-      console.warn('[contract-acceptance] Could not send offer response to issuer:', dmError.message);
+      console.warn(`[contract-acceptance] Could not send offer response to issuer: ${dmError.message}`);
     }
   }
 
@@ -200,17 +200,18 @@ function createContractAcceptanceHandler(dependencies) {
                 : `${formattedTeamName} OFFICIAL SIGNING`
             );
 
+            const displayName = targetMember.displayName;
             if (isEmergency) {
               const emergencySignsUsed = updatedTeamInfo?.emergencySignsUsed ?? (teamInfo?.emergencySignsUsed + 1);
               signingEmbed.addFields(
-                { name: 'Player Signed', value: `<@${userId}> has accepted an emergency contract with ${formattedTeamName}! 🚨` },
+                { name: 'Player Signed', value: `**${displayName}** has accepted an emergency contract with ${formattedTeamName}! 🚨` },
                 { name: 'Team Capacity', value: `**${capacityText}**` },
                 { name: 'Emergency Contracts Used', value: `**${emergencySignsUsed}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}**` },
                 { name: 'Player Signings Used', value: `**${signingsText}**` }
               );
             } else {
               signingEmbed.addFields(
-                { name: 'Player Signed', value: `<@${userId}> has officially joined ${formattedTeamName}! 🎉` },
+                { name: 'Player Signed', value: `**${displayName}** has officially joined ${formattedTeamName}! 🎉` },
                 { name: 'Team Capacity', value: `**${capacityText}**` },
                 { name: 'Player Signings Used', value: `**${signingsText}**` }
               );

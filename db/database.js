@@ -65,10 +65,12 @@ module.exports = {
     );
   },
 
-  getTeamReleasesCount: async (teamName) => {
-    const history = await Team.findOne({ name: teamName.toUpperCase() }).exec();
-    return history ? history.releasesUsed : 0;
-  },
+  incrementEmergencySign: (teamName) =>
+    Team.findOneAndUpdate(
+      { name: teamName.toUpperCase() },
+      { $inc: { emergencySignsUsed: 1 } },
+      { new: true }
+    ),
 
   incrementTeamRelease: (teamName) =>
     Team.findOneAndUpdate(
@@ -132,7 +134,7 @@ module.exports = {
       }));
 
       await Team.insertMany(teamsToCreate);
-      console.log('✅ [Seed] All 24 national teams registered.');
+      console.log('✅ [Seed] All national teams registered.');
     } catch (error) {
       logError(error, null, { context: 'DB_SEEDING' });
     }

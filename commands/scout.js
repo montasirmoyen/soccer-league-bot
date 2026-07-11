@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
-const { getPositionChoices } = require('../utils/builder-helpers');
+const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { isChairman } = require('../utils/validations');
 
@@ -16,7 +16,7 @@ module.exports = {
         .setName('position')
         .setDescription('Position you are scouting for')
         .setRequired(true)
-        .addChoices(getPositionChoices())
+        .addChoices(builderHelpers.getPositionChoices())
     )
     .addStringOption((option) =>
       option
@@ -27,6 +27,7 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    const displayName = interaction.member.displayName;
     const userId = interaction.user.id;
     const position = interaction.options.getString('position');
     const message = interaction.options.getString('message');
@@ -35,9 +36,7 @@ module.exports = {
 
     try {
       const staffRecord = await database.isUserStaffAnywhere(userId);
-      const adminOverride = isChairman(interaction.member);
-
-      if (!staffRecord && !adminOverride) {
+      if (!staffRecord) {
         return interaction.editReply({ content: '❌ You are not an authorized manager.', ephemeral: true });
       }
 
@@ -60,18 +59,17 @@ module.exports = {
       cooldowns.set(userId, now);
       setTimeout(() => cooldowns.delete(userId), cooldownAmount);
 
-      const scoutingTeamName = staffRecord ? staffRecord.name : 'PSL Staff';
-
+      const formattedTeamName = builderHelpers.getFormattedTeamName(staffRecord.name);
       const embed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
         .setTitle('🔍 Player Scout')
         .setDescription(
-          `**${scoutingTeamName}** is scouting for players!\n\n` +
+          `**${formattedTeamName}** is scouting for players!\n\n` +
           `📌 **Position**: ${position}\n\n` +
           `💬 **Message**:\n${message}\n\n` +
-          `*If you're interested and available, feel free to DM <@${userId}>!*`
+          `*If you're interested and available, feel free to DM **${displayName}**!*`
         )
         .setAuthor({
-          name: interaction.user.displayName,
+          name: displayName,
           iconURL: interaction.user.displayAvatarURL(),
         });
 

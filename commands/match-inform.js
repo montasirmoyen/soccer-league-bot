@@ -52,8 +52,8 @@ module.exports = {
         database.getPlayersByTeam(team2),
       ]);
 
-      const formattedTeam1 = builderHelpers.getFormattedTeamName(team1).toUpperCase();
-      const formattedTeam2 = builderHelpers.getFormattedTeamName(team2).toUpperCase();
+      const formattedTeam1 = builderHelpers.getFormattedTeamName(team1);
+      const formattedTeam2 = builderHelpers.getFormattedTeamName(team2);
 
       const matchEmbed = buildPSLEmbed(interaction.client, constants.WARNING_COLOR)
         .setTitle('🏆 OFFICIAL MATCH NOTIFICATION')
@@ -65,18 +65,18 @@ module.exports = {
           {
             name: formattedTeam1,
             value: [
-              `👔 ${teamInfo1?.manager ? `<@${teamInfo1.manager}>` : '*Vacant*'}`,
-              `📋 ${teamInfo1?.assistantManager ? `<@${teamInfo1.assistantManager}>` : '*Vacant*'}`,
-              `👥 ${squad1.length}/${constants.MAX_ROSTER_SIZE} players`,
+              `**M.:** ${teamInfo1?.manager ? `<@${teamInfo1.manager}>` : '*Vacant*'}`,
+              `**A.M.:** ${teamInfo1?.assistantManager ? `<@${teamInfo1.assistantManager}>` : '*Vacant*'}`,
+              `\`[${squad1.length}/${constants.MAX_ROSTER_SIZE}]\``,
             ].join('\n'),
             inline: true,
           },
           {
             name: formattedTeam2,
             value: [
-              `👔 ${teamInfo2?.manager ? `<@${teamInfo2.manager}>` : '*Vacant*'}`,
-              `📋 ${teamInfo2?.assistantManager ? `<@${teamInfo2.assistantManager}>` : '*Vacant*'}`,
-              `👥 ${squad2.length}/${constants.MAX_ROSTER_SIZE} players`,
+              `**M.:** ${teamInfo2?.manager ? `<@${teamInfo2.manager}>` : '*Vacant*'}`,
+              `**A.M.:** ${teamInfo2?.assistantManager ? `<@${teamInfo2.assistantManager}>` : '*Vacant*'}`,
+              `\`[${squad2.length}/${constants.MAX_ROSTER_SIZE}]\``,
             ].join('\n'),
             inline: true,
           },

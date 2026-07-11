@@ -23,7 +23,8 @@ module.exports = {
     }
 
     const selectedTeam = interaction.options.getString('team');
-    const targetUser = interaction.options.getUser('player');
+    const targetUser = interaction.options.getMember('player');
+    const displayName = targetUser.displayName;
     const userId = targetUser.id;
 
     if (targetUser.bot) {
@@ -39,7 +40,7 @@ module.exports = {
         database.getPlayersByTeam(selectedTeam)
       ]);
 
-      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam).toUpperCase()}**`;
+      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam)}**`;
 
       if (isWindowOpen) {
         return interaction.editReply({ content: '❌ The window is **OPEN**. Use `/contract` instead.', flags: MessageFlags.Ephemeral });
@@ -54,7 +55,8 @@ module.exports = {
         return interaction.editReply({ content: `❌ Roster full (${constants.MAX_ROSTER_SIZE}/${constants.MAX_ROSTER_SIZE}).`, flags: MessageFlags.Ephemeral });
       }
       if (isStaffSomewhere) {
-        return interaction.editReply({ content: `❌ <@${userId}> is management staff for **${isStaffSomewhere.name}** and cannot sign as a player.`, flags: MessageFlags.Ephemeral });
+        const teamName = builderHelpers.getFormattedTeamName(isStaffSomewhere.name);
+        return interaction.editReply({ content: `❌ <@${userId}> is management staff for **${teamName}** and cannot sign as a player.`, flags: MessageFlags.Ephemeral });
       }
       if (activeContract) {
         return interaction.editReply({ content: `❌ <@${userId}> already has a contract with **${activeContract.teamName}**.`, flags: MessageFlags.Ephemeral });
@@ -70,7 +72,7 @@ module.exports = {
       const role = await builderHelpers.getTeamRole(interaction.client, selectedTeam);
       const emergencyContractEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
         .setTitle('🚨 EMERGENCY CONTRACT OFFER!')
-        .setDescription(`Hello <@${userId}>,\n${formattedTeamName} has sent you an **Emergency Contract** while the window is closed.\n\nReview and make your choice below:`);
+        .setDescription(`Hello **${displayName}**, \n${formattedTeamName} has sent you an **Emergency Contract** while the window is closed.\n\nReview and make your choice below:`);
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`emergencyaccept_${selectedTeam}_${userId}_${interaction.user.id}`).setLabel('🤝 Accept Emergency').setStyle(ButtonStyle.Success),

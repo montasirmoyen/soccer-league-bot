@@ -16,8 +16,8 @@ const { safeReply, safeDeferReply } = require('./utils/discord-helpers');
 const { logError, replyWithError } = require('./utils/error-handler');
 const { registerVerifierHandler }  = require('./handlers/verifier-handler');
 const { createContractAcceptanceHandler } = require('./handlers/contract-acceptance');
+const guildMemberRemoveEvent       = require('./handlers/guild-member-remove');
 const { updateTeamsRoster }        = require('./utils/roster-updater');
-const guildMemberRemoveEvent       = require('./events/guild-member-remove');
 
 class UserFacingError extends Error {
   constructor(message) {
@@ -149,20 +149,6 @@ async function bootstrap() {
   if (!allTeams?.length) {
     console.error('❌ No teams found in the database after seeding. Exiting.');
     process.exit(1);
-  }
-
-  for (const team of allTeams) {
-    const players = await database.getPlayersByTeam(team.name);
-    for (const player of players) {
-      const userId = player.userId;
-      const guild  = await client.guilds.fetch(constants.GUILD_ID).catch(() => null);
-      if (!guild) continue;
-      const member = await guild.members.fetch(userId).catch(() => null);
-      if (!member) {
-        await database.releasePlayer(userId);
-        console.log(`[index.js] Released ${userId} from ${team.name} due to leaving the guild.`);
-      }
-    }
   }
 
   const commands = loadCommands(client);

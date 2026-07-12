@@ -20,7 +20,7 @@ module.exports = {
     }
 
     if (!isChairman(interaction.member)) {
-      return interaction.editReply({ content: '❌ Only Chairmen and Overseers are allowed to toggle the transfer window.', flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ content: '❌ You do not have permission to use this command.', flags: MessageFlags.Ephemeral });
     }
 
     const targetStatus = interaction.options.getBoolean('status');
@@ -53,8 +53,8 @@ module.exports = {
           .setTitle(WINDOW_EMBED_TITLE)
           .setDescription(
             targetStatus
-              ? 'The transfer window is now **OPEN**! Teams can register contracts and release players.'
-              : 'The transfer window is now **CLOSED**! No new contracts or releases are permitted.'
+              ? 'The transfer window is now **OPEN**! Teams can now register contracts.'
+              : 'The transfer window is now **CLOSED**! No new contracts are permitted. Use `\/emergency-contract`\ to sign players.'
           );
 
         const messagePayload = { content: targetStatus ? '🟢' : '🔴', embeds: [embed] };

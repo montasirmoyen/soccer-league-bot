@@ -23,9 +23,10 @@ module.exports = {
       });
     }
 
-    const targetUser = interaction.options.getMember('player');
-    const displayName = targetUser.displayName;
-    const userId     = targetUser.id;
+    const targetMember = interaction.options.getMember('player');
+    const targetUser = interaction.options.getUser('player');
+    const displayName = targetMember ? targetMember.displayName : (targetUser.globalName || targetUser.username);
+    const userId      = targetUser.id;
 
     if (targetUser.bot) {
       return interaction.editReply({
@@ -84,15 +85,15 @@ module.exports = {
 
       (async () => {
         try {
-          const targetMember = await safeFetchMember(interaction.guild, userId);
-          if (targetMember) {
+          const fetchedMember = await safeFetchMember(interaction.guild, userId);
+          if (fetchedMember) {
             const rolesToRemove = [teamInfo.roleId];
             if (isStaff) rolesToRemove.push(globalStaffRoleId);
 
-            await Promise.all(rolesToRemove.map((rId) => safeRoleRemove(targetMember, rId))).catch(console.warn);
+            await Promise.all(rolesToRemove.map((rId) => safeRoleRemove(fetchedMember, rId))).catch(console.warn);
             console.log(
               `[release.js] Stripped ${rolesToRemove.length} role(s) from ${userId}` +
-              (isStaff ? ` (including ${staffRoleName} role).` : '.'),
+              (isStaff ? ` (including ${staffRoleName} role).` : '.')
             );
           }
 

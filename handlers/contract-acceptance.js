@@ -109,7 +109,7 @@ function createContractAcceptanceHandler(dependencies) {
         `You have declined the ${offerType} offer from ${formattedTeamName}.\n\nThis decision is final.`
       );
 
-    await interaction.message.edit({ embeds: [refuseEmbed], components: [] }).catch(console.warn);
+    await interaction.editReply({ embeds: [refuseEmbed], components: [] }).catch(console.warn);
 
     await withTimeout(
       notifyOfferingStaff(client, issuerId, userId, teamName, false, isEmergency),
@@ -119,12 +119,11 @@ function createContractAcceptanceHandler(dependencies) {
   }
 
   async function processAcceptance(interaction, client, teamName, userId, issuerId, isEmergency) {
-    const message = interaction.message;
     const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName).toUpperCase()}**`;
 
     const failWithEmbed = async (title, description) => {
-      await message
-        .edit({
+      // Corrigido para usar interaction.editReply
+      await interaction.editReply({
           embeds: [
             buildPSLEmbed(client, constants.DEFAULT_EMBED_COLOR)
               .setTitle(title)
@@ -185,7 +184,7 @@ function createContractAcceptanceHandler(dependencies) {
             : `Welcome to ${formattedTeamName}! You are now an officially registered squad member. Good luck this season! 🏆`
         );
 
-      await message.edit({ embeds: [successEmbed], components: [] }).catch(console.warn);
+      await interaction.editReply({ embeds: [successEmbed], components: [] }).catch(console.warn);
 
       await Promise.all([
         (async () => {
@@ -245,7 +244,7 @@ function createContractAcceptanceHandler(dependencies) {
         context: 'PROCESS_ACCEPTANCE_ERROR',
       });
 
-      await message.edit({ content: '❌ Error processing your signing. Please contact staff.', components: [] }).catch(console.warn);
+      await interaction.editReply({ content: '❌ Error processing your signing. Please contact staff.', components: [] }).catch(console.warn);
     }
   }
 
@@ -274,7 +273,7 @@ function createContractAcceptanceHandler(dependencies) {
 
     const conflict = checkPlayerOperationConflict(userId);
     if (conflict) {
-      await interaction.message.edit({ content: '❌ Another action is already processing. Please try again.', components: [] }).catch(console.warn);
+      await interaction.editReply({ content: '❌ Another action is already processing. Please try again.', components: [] }).catch(console.warn);
       return;
     }
 
@@ -297,7 +296,7 @@ function createContractAcceptanceHandler(dependencies) {
       }
     } catch (error) {
       await logError(error, client, { userId, teamName, action, context: 'BUTTON_INTERACTION_ERROR' });
-      await interaction.message.edit({ content: '❌ An error occurred processing your response. Please contact staff.', components: [] }).catch(console.warn);
+      await interaction.editReply({ content: '❌ An error occurred processing your response. Please contact staff.', components: [] }).catch(console.warn);
     } finally {
       clearPlayerOperation(userId);
     }

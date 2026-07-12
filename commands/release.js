@@ -25,8 +25,6 @@ module.exports = {
 
     const targetMember = interaction.options.getMember('player');
     const targetUser = interaction.options.getUser('player');
-    
-    // Fallback: se o membro não estiver no servidor, evita o crash pegando o username global
     const displayName = targetMember ? targetMember.displayName : (targetUser.globalName || targetUser.username);
     const userId      = targetUser.id;
 

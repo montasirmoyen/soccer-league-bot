@@ -33,24 +33,20 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    const displayName = interaction.user.displayName;
-    const userId = interaction.user.id;
+    const user = interaction.user;
+    const userId = user.id;
     const now = Date.now();
 
-    console.log(`\n⚽ [friendly.js] Friendly announcement by ${interaction.user.tag}`);
+    console.log(`\n⚽ [friendly.js] Friendly announcement by ${user.tag}`);
 
-    if (cooldowns.has(userId)) {
-      const expirationTime = cooldowns.get(userId) + COOLDOWN_TIME;
-      if (now < expirationTime) {
-        const timeLeft = Math.ceil((expirationTime - now) / 1000);
-        return interaction.editReply({
-          content: `⏳ Please wait ${timeLeft} more second(s) before using this command again.`,
-          ephemeral: true,
-        });
-      }
+    const cooldownState = builderHelpers.getCooldownState(userId, cooldowns, COOLDOWN_TIME, now);
+    if (cooldownState.isCoolingDown) {
+      return interaction.editReply({
+        content: `⏳ Please wait ${builderHelpers.formatCooldownDuration(cooldownState.timeLeftMs)} before using this command again.`,
+        ephemeral: true,
+      });
     }
 
-    const user = interaction.user;
     const region = interaction.options.getString('region');
     const type = interaction.options.getString('type');
     const image = interaction.options.getAttachment('image');
@@ -68,7 +64,7 @@ module.exports = {
       const staffRecord = await database.isUserStaffAnywhere(userId);
       const isManager = !!staffRecord;
       const member = await interaction.guild.members.fetch(userId).catch(() => null);
-      const displayName = member ? member.displayName : user.username;
+      const displayName = builderHelpers.getDiscordDisplayName(member, user);
 
       let pingString = `<@${userId}> <@&${constants.FRIENDLY_ROLE_ID}>`;
 

@@ -266,8 +266,8 @@ function createContractAcceptanceHandler(dependencies) {
     const lockedComponents = buildLockedRow(interaction.message.components);
     try {
       await interaction.update({ components: lockedComponents });
-    } catch (updateErr) {
-      console.warn('[contract-acceptance] Could not lock buttons:', updateErr.message);
+    } catch (updateError) {
+      console.warn('[contract-acceptance] Could not lock buttons:', updateError.message);
       return;
     }
 

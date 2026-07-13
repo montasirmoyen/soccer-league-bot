@@ -41,7 +41,7 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     const user = interaction.user;
-    const displayName = user.displayName;
+    const displayName = builderHelpers.getDiscordDisplayName(interaction.member, user);
 
     const position = interaction.options.getString('position');
     const region = interaction.options.getString('region');
@@ -51,19 +51,12 @@ module.exports = {
     try {
       const cooldownAmount = 3 * 24 * 60 * 60 * 1000;
       const now = Date.now();
+      const cooldownState = builderHelpers.getCooldownState(userId, cooldowns, cooldownAmount, now);
 
-      if (cooldowns.has(userId)) {
-        const expirationTime = cooldowns.get(userId) + cooldownAmount;
-
-        if (now < expirationTime) {
-          const timeLeft = (expirationTime - now) / 1000;
-          const hours = Math.floor(timeLeft / 3600);
-          const minutes = Math.floor((timeLeft % 3600) / 60);
-
-          return interaction.editReply({
-            content: `⏰ You are on cooldown! Please try again in **${hours}**h **${minutes}**m.`
-          });
-        }
+      if (cooldownState.isCoolingDown) {
+        return interaction.editReply({
+          content: `⏰ You are on cooldown! Please try again in ${builderHelpers.formatCooldownDuration(cooldownState.timeLeftMs)}.`
+        });
       }
 
       cooldowns.set(userId, now);

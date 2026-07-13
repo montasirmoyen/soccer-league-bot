@@ -129,7 +129,7 @@ module.exports = {
               );
 
             const mentions = [
-              `**<@${userId}>**`,
+              `<@${userId}>`,
               updatedTeamInfo?.manager          ? `<@${updatedTeamInfo.manager}>`          : null,
               updatedTeamInfo?.assistantManager  ? `<@${updatedTeamInfo.assistantManager}>` : null,
             ]

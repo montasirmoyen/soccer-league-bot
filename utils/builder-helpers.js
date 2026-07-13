@@ -66,6 +66,41 @@ function getTimezoneChoices() {
     });
 }
 
+function getDiscordDisplayName(member, user) {
+    const fallbackUser = member || user;
+    return fallbackUser?.displayName || user?.displayName || user?.username || 'Unknown User';
+}
+
+function getCooldownState(userId, cooldowns, cooldownAmount, now = Date.now()) {
+    if (!cooldowns.has(userId)) {
+        return { isCoolingDown: false };
+    }
+
+    const expirationTime = cooldowns.get(userId) + cooldownAmount;
+    if (now < expirationTime) {
+        return { isCoolingDown: true, timeLeftMs: expirationTime - now };
+    }
+
+    cooldowns.delete(userId);
+    return { isCoolingDown: false };
+}
+
+function formatCooldownDuration(timeLeftMs) {
+    const totalSeconds = Math.max(1, Math.ceil(timeLeftMs / 1000));
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0 || days > 0) parts.push(`${hours}h`);
+    if (minutes > 0 || hours > 0 || days > 0) parts.push(`${minutes}m`);
+    if (seconds > 0 && !days && !hours && minutes < 1) parts.push(`${seconds}s`);
+
+    return parts.join(' ');
+}
+
 function getFriendlyChoices() {
     const friendlyKeys = Object.keys(configFriendlies.friendlies);
     return friendlyKeys.map(friendly => {
@@ -120,6 +155,9 @@ module.exports = {
     getTeamChoices,
     getPositionChoices,
     getTimezoneChoices,
+    getDiscordDisplayName,
+    getCooldownState,
+    formatCooldownDuration,
     getFriendlyChoices,
     getTeamRole,
     getDisplayedReleasesAmount,

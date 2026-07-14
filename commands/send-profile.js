@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const constants = require('../config/constants');
-const { getPositionChoices, getTimezoneChoices } = require('../utils/builder-helpers');
+const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 const cooldowns = new Map();
@@ -14,19 +14,19 @@ module.exports = {
         .setName('position')
         .setDescription('Your preferred position')
         .setRequired(true)
-        .addChoices(getPositionChoices())
+        .addChoices(builderHelpers.getPositionChoices())
     )
     .addStringOption((option) =>
       option
         .setName('region')
         .setDescription('Your timezone/region')
         .setRequired(true)
-        .addChoices(getTimezoneChoices())
+        .addChoices(builderHelpers.getTimezoneChoices())
     )
     .addStringOption((option) =>
       option
         .setName('nationality')
-        .setDescription('Your country flag emoji only (e.g. 🇧🇷)')
+        .setDescription('Your country flag emoji only (e.g. 🇦🇴)')
         .setRequired(true)
         .setMaxLength(9)
     )

@@ -27,12 +27,13 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    const displayName = builderHelpers.getDiscordDisplayName(interaction.member, interaction.user);
-    const userId = interaction.user.id;
+    const user = interaction.user;
+    const displayName = builderHelpers.getDiscordDisplayName(interaction.member, user);
+    const userId = user.id;
     const position = interaction.options.getString('position');
     const message = interaction.options.getString('message');
 
-    console.log(`\n🔍 [scout.js] Scout posted by ${interaction.user.tag}`);
+    console.log(`\n🔍 [scout.js] Scout posted by ${user.tag}`);
 
     try {
       const staffRecord = await database.isUserStaffAnywhere(userId);
@@ -63,10 +64,7 @@ module.exports = {
           `💬 **Message**:\n${message}\n\n` +
           `*If you're interested and available, feel free to DM **${displayName}**!*`
         )
-        .setAuthor({
-          name: displayName,
-          iconURL: interaction.user.displayAvatarURL(),
-        });
+        .setThumbnail(user.displayAvatarURL());
 
       const targetChannel = await interaction.client.channels.fetch(constants.SCOUT_CHANNEL_ID);
       if (targetChannel) {

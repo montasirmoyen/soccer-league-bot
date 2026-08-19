@@ -79,7 +79,17 @@ module.exports = {
         new ButtonBuilder().setCustomId(`emergencyrefuse_${selectedTeam}_${userId}_${interaction.user.id}`).setLabel('❌ Refuse').setStyle(ButtonStyle.Danger)
       );
 
-      await targetUser.send({ embeds: [emergencyContractEmbed], components: [row] });
+      try {
+        await targetUser.send({ embeds: [emergencyContractEmbed], components: [row] });
+      } catch (dmError) {
+        if (dmError.code === 50007 || dmError.code === 50278 || dmError.status === 403) {
+          return interaction.editReply({
+            content: `❌ Unable to send a DM to <@${userId }>. They may have **DMs disabled** or **blocked the bot**. \nPlease ask them to enable DMs from server members and try again.\n 1. Right-click the server icon and select "**Privacy Settings**".\n 2. Ensure "**Allow DMs from other members**" is enabled.\n 3. Try running the command again.`,
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+        throw dmError;
+      }
 
       return interaction.editReply({ content: `📨 Emergency offer sent to <@${userId}> for ${formattedTeamName}! (${teamInfo?.emergencySignsUsed ?? 0}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM} used)`, flags: MessageFlags.Ephemeral });
 

@@ -81,11 +81,8 @@ module.exports = {
       const pingString = `<@${userId}> <@&${SCRIM_PING_ROLE_ID}>`;
 
       const embed = buildPSLEmbed(interaction.client, 0x3af3e3)
-        .setAuthor({
-          name: displayName,
-          iconURL: user.displayAvatarURL({ extension: 'png', size: 128 }),
-        })
         .setTitle(`**${displayName}** is hosting a scrim!`)
+        .setThumbnail(user.displayAvatarURL())
         .addFields(
           { name: 'Server Name', value: serverName, inline: true },
           { name: 'Server Region', value: serverRegion, inline: true },

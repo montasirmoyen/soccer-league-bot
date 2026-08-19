@@ -44,7 +44,7 @@ async function isRegistered(member) {
     const fetchedMember = await member.guild.members.fetch(member.id);
     return fetchedMember.roles.cache.has(constants.REGISTERED_ROLE_ID);
   } catch (error) {
-    console.error(`Erro ao buscar o membro: ${error}`);
+    console.error(`Error fetching member: ${error}`);
     return false;
   }
 }

@@ -5,16 +5,11 @@ const configTimezones = require('../config/timezones')
 const configFriendlies = require('../config/friendlies')
 const constants = require('../config/constants');
 const database = require('../db/database');
-const countryEmoji = require('country-emoji');
 
-function getTeamFlag(teamKey) {
-    const key = teamKey?.toLowerCase().trim();
-
-    if (key === 'england') {
-        return '🏴󠁧󠁢󠁥󠁮󠁧󠁿';
-    }
-
-    return countryEmoji.flag(teamKey) || '🏳️';
+function getTeamEmoji(teamKey) {
+    const key = teamKey?.toUpperCase().trim();
+    const emoji = configTeams.teams[key]?.EMOJI_ID || '🏴';
+    return emoji;
 }
 
 function getFormattedTeamName(teamKey) {
@@ -23,9 +18,9 @@ function getFormattedTeamName(teamKey) {
         .split(' ')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
-    const teamFlag = getTeamFlag(teamKey)
+    const emojiId = getTeamEmoji(teamKey);
 
-    return `${teamFlag} ${formattedName}`;
+    return `${emojiId} ${formattedName}`;
 }
 
 function getTeamChoices() {
@@ -38,7 +33,7 @@ function getTeamChoices() {
             .join(' ');
 
         return {
-            name: getFormattedTeamName(team),
+            name: `⚽ ${formattedName}`,
             value: team
         };
     });
@@ -150,7 +145,7 @@ async function getDisplayedPlayerSigningsAmount(userId) {
 }
 
 module.exports = {
-    getTeamFlag,
+    getTeamEmoji,
     getFormattedTeamName,
     getTeamChoices,
     getPositionChoices,

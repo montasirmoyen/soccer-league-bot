@@ -178,7 +178,7 @@ async function bootstrap() {
   client.once(Events.ClientReady, () => {
     console.log(`\n🤖 Bot online as: ${client.user.tag} (${client.user.id})`);
     client.user.setPresence({
-      status:     'dnd',
+      status:     'online',
       activities: [{ name: '/help', type: ActivityType.Listening }],
     });
     updateTeamsRoster(client);

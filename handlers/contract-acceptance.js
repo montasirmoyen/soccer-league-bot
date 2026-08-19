@@ -93,7 +93,11 @@ function createContractAcceptanceHandler(dependencies) {
             : `<@${playerId}> refused the ${offerType} offer for ${formattedTeamName}.`
         );
 
-      await issuer.send({ embeds: [responseEmbed] });
+      try {
+        await issuer.send({ embeds: [responseEmbed] });
+      } catch (dmError) {
+        console.warn(`[contract-acceptance] Could not send offer response to issuer: ${dmError.message}`);
+      }
     } catch (dmError) {
       console.warn(`[contract-acceptance] Could not send offer response to issuer: ${dmError.message}`);
     }
@@ -103,7 +107,7 @@ function createContractAcceptanceHandler(dependencies) {
     const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName).toUpperCase()}**`;
     const offerType = isEmergency ? 'emergency contract' : 'contract';
 
-    const refuseEmbed = buildPSLEmbed(client, constants.DEFAULT_EMBED_COLOR)
+    const refuseEmbed = buildPSLEmbed(client, constants.ERROR_COLOR)
       .setTitle('❌ Offer Declined')
       .setDescription(
         `You have declined the ${offerType} offer from ${formattedTeamName}.\n\nThis decision is final.`
@@ -193,11 +197,13 @@ function createContractAcceptanceHandler(dependencies) {
             const capacityText = await builderHelpers.getDisplayedPlayersAmount(teamName);
             const signingsText = await builderHelpers.getDisplayedPlayerSigningsAmount(userId);
 
-            const signingEmbed = buildPSLEmbed(client, embedColor).setTitle(
+            const signingEmbed = buildPSLEmbed(client, embedColor)
+            .setTitle(
               isEmergency
                 ? `🚨 ${formattedTeamName} EMERGENCY SIGNING`
                 : `${formattedTeamName} OFFICIAL SIGNING`
-            );
+            )
+            .setThumbnail(interaction.user.displayAvatarURL());
 
             const displayName = targetMember.displayName;
             if (isEmergency) {

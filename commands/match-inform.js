@@ -117,7 +117,7 @@ module.exports = {
 
       return interaction.editReply({
         content: `✅ Done! **${sent}** delivered, **${failed}** failed (likely closed DMs).`,
-        flags: MessageFlags.Ephemeral,
+        flags: MessageFlags.Ephemeral
       });
 
     } catch (error) {

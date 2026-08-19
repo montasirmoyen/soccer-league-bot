@@ -68,7 +68,7 @@ module.exports = {
     if (!isChairman(interaction.member) && isManager && !isAssistantAppointment) {
       return interaction.editReply({
         content: '❌ Managers can only appoint Assistant Managers.',
-        flags: MessageFlags.Ephemeral,
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -83,14 +83,14 @@ module.exports = {
         if (!currentStaffId) {
           return interaction.editReply({
             content: `❌ The **${roleName}** position for ${formattedTeamName} is already empty.`,
-            flags: MessageFlags.Ephemeral,
+            flags: MessageFlags.Ephemeral
           });
         }
 
         await database.appointStaff(selectedTeam, null, selectedRole);
         await interaction.editReply({
           content: `🧹 The **${roleName}** position for ${formattedTeamName} has been cleared.`,
-          flags: MessageFlags.Ephemeral,
+          flags: MessageFlags.Ephemeral
         });
 
         (async () => {
@@ -102,10 +102,7 @@ module.exports = {
             ]);
 
             if (oldMember) {
-              await Promise.all([
-                safeRoleRemove(oldMember, globalRoleId),
-                safeRoleRemove(oldMember, teamInfo.roleId),
-              ]).catch(console.warn);
+              await safeRoleRemove(oldMember, globalRoleId).catch(console.warn);
               console.log(`[appoint.js] Revoked staff roles from ${currentStaffId} (unappoint).`);
             }
 
@@ -119,7 +116,7 @@ module.exports = {
                 .addFields({
                   name: 'Position Cleared',
                   value: clearedUser
-                    ? `**${currentStaffDisplayName}** has been removed from the **${roleName}** role for ${formattedTeamName}. Their team badge and staff role have been revoked. 📋`
+                    ? `**${currentStaffDisplayName}** has been removed from the **${roleName}** role for ${formattedTeamName}. Their staff role have been revoked. 📋`
                     : `The **${roleName}** position has been cleared and all associated roles have been revoked. 📋`,
                 });
 

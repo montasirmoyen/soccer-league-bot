@@ -139,14 +139,7 @@ module.exports = {
       } catch (dmError) {
         if (dmError.code === 50007 || dmError.code === 50278 || dmError.status === 403) {
           return interaction.editReply({
-            embeds: [
-              buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
-                .setTitle('❌ Unable to Deliver Contract')
-                .setDescription(
-                  `Could not send a Direct Message to <@${userId }>.\n\n` +
-                  `Please ask them to enable **DMs from server members** in their Discord Privacy settings and try again.`,
-                ),
-            ],
+            content: `❌ Unable to send a DM to <@${userId }>. They may have **DMs disabled** or **blocked the bot**. \nPlease ask them to enable DMs from server members and try again.\n 1. Right-click the server icon and select "**Privacy Settings**".\n 2. Ensure "**Allow DMs from other members**" is enabled.\n 3. Try running the command again.`,
             flags: MessageFlags.Ephemeral,
           });
         }

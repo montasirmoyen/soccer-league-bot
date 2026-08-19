@@ -33,13 +33,13 @@ async function updateTeamsRoster(client) {
 
       const cleanId = String(userId).replace(/\D/g, '');
       const cachedMember = memberCollection?.get(cleanId);
-      if (cachedMember?.displayName) return `**${cachedMember.displayName}**`;
+      if (cachedMember?.displayName) return `${cachedMember.displayName}`;
 
       return formatGuildMemberDisplay(guild, userId);
     };
 
     const embed = buildPSLEmbed(client, constants.DEFAULT_EMBED_COLOR)
-      .setTitle('👑 PSL26 WORLD CUP TEAMS 👑');
+      .setTitle('<:ligue_nationale:1528471501173424229> <:liga_iberia:1530302975749390336> <:lega_proxima:1533999482860212334> PSL26 S3 TEAMS');
 
     const fields = [];
 

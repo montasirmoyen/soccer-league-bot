@@ -69,8 +69,7 @@ module.exports = {
       let pingString = `<@${userId}> <@&${constants.FRIENDLY_ROLE_ID}>`;
 
       const embed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
-        .setAuthor({ name: displayName, iconURL: user.displayAvatarURL({ extension: 'png', size: 128 }) });
-
+      .setThumbnail(user.displayAvatarURL());
       if (isManager) {
         embed.setTitle(`**${staffRecord.name}** is Looking for a Match!`)
           .addFields(

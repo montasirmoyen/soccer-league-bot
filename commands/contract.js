@@ -64,8 +64,9 @@ module.exports = {
     }
 
     try {
-      const [isWindowOpen, teamInfo, isStaffSomewhere, activeContract, currentSquad] = await Promise.all([
+      const [isWindowOpen, isLeagueStarted, teamInfo, isStaffSomewhere, activeContract, currentSquad] = await Promise.all([
         database.getTransferWindowState(),
+        database.getLeagueState(),
         database.getTeamInfo(selectedTeam),
         database.isUserStaffAnywhere(userId ),
         database.getContractedTeam(userId ),
@@ -105,7 +106,7 @@ module.exports = {
         });
       }
       const playerSigningsUsed = await database.getPlayerSigningsCount(userId);
-      if (playerSigningsUsed >= constants.MAX_SIGNINGS_PER_PLAYER) {
+      if (playerSigningsUsed >= constants.MAX_SIGNINGS_PER_PLAYER && isLeagueStarted) {
         return interaction.editReply({
           content: `❌ This player has reached the maximum number of signings allowed.`,
           flags: MessageFlags.Ephemeral

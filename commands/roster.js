@@ -22,10 +22,11 @@ module.exports = {
 
     const selectedTeam = interaction.options.getString('team');
     try {
-      const [teamInfo, contractedPlayers, role] = await Promise.all([
+      const [teamInfo, contractedPlayers, role, isLeagueOpen] = await Promise.all([
         database.getTeamInfo(selectedTeam),
         database.getPlayersByTeam(selectedTeam),
-        builderHelpers.getTeamRole(interaction.client, selectedTeam)
+        builderHelpers.getTeamRole(interaction.client, selectedTeam),
+        database.getLeagueState(),
       ]);
 
       const rawIds = contractedPlayers.map(p => p.userId);
@@ -58,14 +59,19 @@ module.exports = {
 
       const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam)}**`;
 
+      const rosterFields = [
+        { name: '💼 Management', value: `**M.:** ${managerText}\n**A.M.:** ${assistantText}`, inline: false },
+        { name: '⚽ Registered Players', value: `\`[${playerCapacity}]\`\n${playerLines.join('\n')}`, inline: false },
+        { name: '🚨 Emergency Signs', value: `**${teamInfo?.emergencySignsUsed ?? 0}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}** used`, inline: false },
+      ];
+
+      if (isLeagueOpen) {
+        rosterFields.push({ name: '🧹 Releases', value: `**${teamInfo?.releasesUsed ?? 0}/${constants.MAX_RELEASES_PER_TEAM}** used`, inline: false });
+      }
+
       const rosterEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
         .setTitle(`${formattedTeamName} OFFICIAL ROSTER`)
-        .addFields(
-          { name: '💼 Management', value: `**M.:** ${managerText}\n**A.M.:** ${assistantText}`, inline: false },
-          { name: '⚽ Registered Players', value: `\`[${playerCapacity}]\`\n${playerLines.join('\n')}`, inline: false },
-          { name: '🚨 Emergency Signs', value: `**${teamInfo?.emergencySignsUsed ?? 0}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}** used`, inline: false },
-          { name: '🧹 Releases', value: `**${teamInfo?.releasesUsed ?? 0}/${constants.MAX_RELEASES_PER_TEAM}** used`, inline: false }
-        );
+        .addFields(rosterFields);
 
       return interaction.editReply({ embeds: [rosterEmbed], flags: MessageFlags.Ephemeral });
     } catch (error) {

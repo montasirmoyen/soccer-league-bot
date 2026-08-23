@@ -1,5 +1,7 @@
 const database = require('../db/database');
 const constants = require('../config/constants');
+const configLeagues = require('../config/leagues');
+const configTeams = require('../config/teams');
 const builderHelpers = require('./builder-helpers');
 const { buildPSLEmbed, formatGuildMemberDisplay } = require('./embed-helpers');
 const { safeFetchMember } = require('./discord-helpers');
@@ -38,40 +40,77 @@ async function updateTeamsRoster(client) {
       return formatGuildMemberDisplay(guild, userId);
     };
 
-    const embed = buildPSLEmbed(client, constants.DEFAULT_EMBED_COLOR)
-      .setTitle('<:ligue_nationale:1528471501173424229> <:liga_iberia:1530302975749390336> <:lega_proxima:1533999482860212334> PSL26 S3 TEAMS');
+    const embeds = [];
+    for (const [leagueName, leagueData] of Object.entries(configLeagues.leagues)) {
+      if (!leagueData || !Array.isArray(leagueData.teams)) continue;
 
-    const fields = [];
+      const embedColor = leagueData.COLOR || constants.DEFAULT_EMBED_COLOR;
+      
+      const titleString = `${builderHelpers.getFormattedLeagueName(leagueName)}`.trim();
 
-    for (const team of allTeams) {
-      const label = builderHelpers.getFormattedTeamName(team.name);
-      const managerId = team.manager ? String(team.manager).replace(/\D/g, '') : null;
-      const assistantManagerId = team.assistantManager ? String(team.assistantManager).replace(/\D/g, '') : null;
+      const embed = buildPSLEmbed(client, embedColor)
+        .setTitle(titleString);
 
-      const manager = team.manager ? await resolveDisplayName(managerId) : '*Vacant*';
-      const assistant = team.assistantManager ? await resolveDisplayName(assistantManagerId) : '*Vacant*';
-      const teamCapacity = await builderHelpers.getDisplayedPlayersAmount(team.name);
+      const fields = [];
 
-      fields.push({
-        name: `${label}`,
-        value: `\`[${teamCapacity}]\`\n**M.:** ${manager}\n**A.M.:** ${assistant}\n\u200b`,
-        inline: true
-      });
+      for (const teamName of leagueData.teams) {
+        const team = allTeams.find((t) => t.name === teamName);
+        if (!team) continue; 
+
+        const staticTeamConfig = configTeams?.teams?.[teamName];
+        const teamEmoji = staticTeamConfig?.EMOJI_ID ? `${staticTeamConfig.EMOJI_ID} ` : '';
+
+        const label = `${builderHelpers.getFormattedTeamName(team.name)}`;
+        
+        const managerId = team.manager ? String(team.manager).replace(/\D/g, '') : null;
+        const assistantManagerId = team.assistantManager ? String(team.assistantManager).replace(/\D/g, '') : null;
+
+        const manager = team.manager ? await resolveDisplayName(managerId) : '*Vacant*';
+        const assistant = team.assistantManager ? await resolveDisplayName(assistantManagerId) : '*Vacant*';
+        const teamCapacity = await builderHelpers.getDisplayedPlayersAmount(team.name);
+
+        fields.push({
+          name: `${label}`,
+          value: `\`[${teamCapacity}]\`\n**M.:** ${manager}\n**A.M.:** ${assistant}\n\u200b`,
+          inline: false
+        });
+      }
+
+      if (fields.length > 0) {
+        embed.addFields(fields);
+      }
+      
+      embeds.push(embed);
     }
 
-    embed.addFields(fields);
+    if (embeds.length > 0) {
+      const messages = await channel.messages.fetch({ limit: 20 });
+      
+      let existingEmbedsMsg = messages.find(
+        (msg) => msg.author.id === client.user.id && msg.embeds.length > 0
+      );
 
-    const messages = await channel.messages.fetch({ limit: 20 });
-    const existing = messages.find(
-      (msg) => msg.author.id === client.user.id && msg.embeds.length > 0,
-    );
+      let finalEmbedsMsg;
 
-    const message = { embeds: [embed] };
-    if (existing) {
-      await existing.edit(message);
-    } else {
-      await channel.send(message);
+      const messagePayload = { content: '# ⚽ PSL S3 Teams', embeds: embeds };
+      if (existingEmbedsMsg) {
+        finalEmbedsMsg = await existingEmbedsMsg.edit(messagePayload);
+      } else {
+        finalEmbedsMsg = await channel.send(messagePayload);
+      }
+
+      const topMessageLink = finalEmbedsMsg.url;
+      const jumpText = `[Come back to the top](${topMessageLink})`;
+
+      const existingShortcutMsg = messages.find(
+        (msg) => msg.author.id === client.user.id && msg.content.includes('Come back to the top')
+      );
+
+      if (!existingShortcutMsg || !finalEmbedsMsg) {
+        await channel.send({ content: jumpText });
+      }
     }
+
   } catch (error) {
     console.error(`[roster-updater.js] Unexpected error: ${error}`);
   }

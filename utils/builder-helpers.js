@@ -1,4 +1,5 @@
 const { Client } = require('discord.js');
+const configLeagues = require('../config/leagues')
 const configTeams = require('../config/teams');
 const configPositions = require('../config/positions')
 const configTimezones = require('../config/timezones')
@@ -6,9 +7,9 @@ const configFriendlies = require('../config/friendlies')
 const constants = require('../config/constants');
 const database = require('../db/database');
 
-function getTeamEmoji(teamKey) {
-    const key = teamKey?.toUpperCase().trim();
-    const emoji = configTeams.teams[key]?.EMOJI_ID || '🏴';
+function getEmoji(group, key) {
+    const objectKey = key?.toUpperCase().trim();
+    const emoji = group[objectKey]?.EMOJI_ID || '🏴';
     return emoji;
 }
 
@@ -18,7 +19,18 @@ function getFormattedTeamName(teamKey) {
         .split(' ')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
-    const emojiId = getTeamEmoji(teamKey);
+    const emojiId = getEmoji(configTeams.teams, teamKey);
+
+    return `${emojiId} ${formattedName}`;
+}
+
+function getFormattedLeagueName(leagueKey) {
+    const formattedName = leagueKey
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    const emojiId = getEmoji(configLeagues.leagues, leagueKey);
 
     return `${emojiId} ${formattedName}`;
 }
@@ -145,8 +157,9 @@ async function getDisplayedPlayerSigningsAmount(userId) {
 }
 
 module.exports = {
-    getTeamEmoji,
+    getEmoji,
     getFormattedTeamName,
+    getFormattedLeagueName,
     getTeamChoices,
     getPositionChoices,
     getTimezoneChoices,

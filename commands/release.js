@@ -35,7 +35,10 @@ module.exports = {
     }
 
     try {
-      const activeContract = await database.getContractedTeam(userId);
+      const [activeContract, isLeagueOpen] = await Promise.all([
+        database.getContractedTeam(userId),
+        database.getLeagueState(),
+      ]);
       if (!activeContract) {
         return interaction.editReply({
           content: `❌ **${displayName}** is already a **Free Agent**.`,
@@ -73,7 +76,9 @@ module.exports = {
         await database.appointStaff(playerTeam, null, staffRole);
       }
       await database.releasePlayer(userId);
-      await database.incrementTeamRelease(playerTeam);
+      if (isLeagueOpen) {
+        await database.incrementTeamRelease(playerTeam);
+      }
 
       await interaction.editReply({
         content: isStaff
@@ -99,7 +104,7 @@ module.exports = {
           const [updatedTeamInfo, teamCapacity, releasesCapacity, role] = await Promise.all([
             database.getTeamInfo(playerTeam),
             builderHelpers.getDisplayedPlayersAmount(playerTeam),
-            builderHelpers.getDisplayedReleasesAmount(playerTeam),
+            isLeagueOpen ? builderHelpers.getDisplayedReleasesAmount(playerTeam) : null,
             builderHelpers.getTeamRole(interaction.client, playerTeam),
           ]);
 
@@ -110,7 +115,7 @@ module.exports = {
             const releaseEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
               .setTitle(`${formattedTeamName} OFFICIAL RELEASE`)
               .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
-              .addFields(
+              .addFields([
                 {
                   name: isStaff ? 'Staff Released' : 'Player Released',
                   value: isStaff
@@ -121,11 +126,8 @@ module.exports = {
                   name:  'Team Capacity',
                   value: `**${teamCapacity}**`,
                 },
-                {
-                  name:  'Releases Used',
-                  value: `**${releasesCapacity}**`,
-                }
-              );
+                ...(isLeagueOpen ? [{ name: 'Releases Used', value: `**${releasesCapacity}**` }] : []),
+              ]);
 
             const mentions = [
               `<@${userId}>`,

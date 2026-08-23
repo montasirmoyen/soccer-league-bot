@@ -189,7 +189,7 @@ module.exports = {
 
       await database.appointStaff(selectedTeam, appointeeId, selectedRole);
       if (!existingContract || existingContract.teamName !== selectedTeam) {
-        await database.contractPlayer(appointeeId, selectedTeam);
+        await database.contractPlayer(appointeeId, selectedTeam, false);
       }
 
       await interaction.editReply({

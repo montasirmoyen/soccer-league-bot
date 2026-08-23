@@ -150,8 +150,9 @@ function createContractAcceptanceHandler(dependencies) {
         return failWithEmbed('❌ Signing Failed', `${formattedTeamName} has used all available emergency signing spots.`);
       }
 
-      const [isWindowOpen, activeContract, squadSize] = await Promise.all([
+      const [isWindowOpen, isLeagueOpen, activeContract, squadSize] = await Promise.all([
         database.getTransferWindowState(),
+        database.getLeagueState(),
         database.getContractedTeam(userId),
         database.getPlayersByTeam(teamName),
       ]);
@@ -172,7 +173,7 @@ function createContractAcceptanceHandler(dependencies) {
       }
 
       const targetMember = await guild.members.fetch(userId);
-      await database.contractPlayer(userId, teamName);
+      await database.contractPlayer(userId, teamName, isLeagueOpen);
 
       let updatedTeamInfo = teamInfo;
       if (isEmergency) {
@@ -196,7 +197,9 @@ function createContractAcceptanceHandler(dependencies) {
           try {
             const { manager, assistant } = await fetchTeamStaff(teamName);
             const capacityText = await builderHelpers.getDisplayedPlayersAmount(teamName);
-            const signingsText = await builderHelpers.getDisplayedPlayerSigningsAmount(userId);
+            const signingsText = isLeagueOpen
+              ? await builderHelpers.getDisplayedPlayerSigningsAmount(userId)
+              : null;
 
             const signingEmbed = buildPSLEmbed(client, embedColor)
             .setTitle(
@@ -209,18 +212,24 @@ function createContractAcceptanceHandler(dependencies) {
             const displayName = targetMember.displayName;
             if (isEmergency) {
               const emergencySignsUsed = updatedTeamInfo?.emergencySignsUsed ?? (teamInfo?.emergencySignsUsed + 1);
-              signingEmbed.addFields(
+              const signingFields = [
                 { name: 'Player Signed', value: `**${displayName}** has accepted an emergency contract with ${formattedTeamName}! 🚨` },
                 { name: 'Team Capacity', value: `**${capacityText}**` },
                 { name: 'Emergency Contracts Used', value: `**${emergencySignsUsed}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}**` },
-                { name: 'Player Signings Used', value: `**${signingsText}**` }
-              );
+              ];
+              if (isLeagueOpen) {
+                signingFields.push({ name: 'Player Signings Used', value: `**${signingsText}**` });
+              }
+              signingEmbed.addFields(signingFields);
             } else {
-              signingEmbed.addFields(
+              const signingFields = [
                 { name: 'Player Signed', value: `**${displayName}** has officially joined ${formattedTeamName}! 🎉` },
                 { name: 'Team Capacity', value: `**${capacityText}**` },
-                { name: 'Player Signings Used', value: `**${signingsText}**` }
-              );
+              ];
+              if (isLeagueOpen) {
+                signingFields.push({ name: 'Player Signings Used', value: `**${signingsText}**` });
+              }
+              signingEmbed.addFields(signingFields);
             }
 
             await postSigningToChannel(client, guild, signingEmbed, manager, assistant);

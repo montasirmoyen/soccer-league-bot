@@ -37,6 +37,10 @@ function validateGuild(interaction) {
   return interaction.guildId === constants.GUILD_ID;
 }
 
+function isCountingReleasesPlayerSignings() {
+  return constants.COUNTING_RELEASES_PLAYER_SIGNINGS;
+}
+
 async function isRegistered(member) {
   if (!member) return false;
 
@@ -57,5 +61,6 @@ module.exports = {
   canManageTeam,
   isRosterFull,
   validateGuild,
+  isCountingReleasesPlayerSignings,
   isRegistered
 };

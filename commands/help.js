@@ -41,11 +41,6 @@ module.exports = {
           inline: false,
         },
         {
-          name: '📜 `/demand`',
-          value: '**Purpose:** Voluntarily demand release from your team\n**Cooldown:** Limited to ' + constants.MAX_DEMANDS_PER_SEASON + ' per season\n**Result:** Automatically posted to #releases with capacity display',
-          inline: false,
-        },
-        {
           name: '📊 `/roster [team_name]`',
           value: '**Purpose:** View current players on a team\n**Shows:** All contracted players with their positions\n**Usage:** Check team depth before joining',
           inline: false,
@@ -126,7 +121,8 @@ module.exports = {
           name: '🕐 Key Constraints',
           value: '• **Roster Size:** ' + constants.MAX_ROSTER_SIZE + ' players max per team\n' +
             '• **Emergency Signings:** ' + constants.MAX_EMERGENCY_SIGNS_PER_TEAM + ' per season (window closed only)\n' +
-            '• **Demands:** ' + constants.MAX_DEMANDS_PER_SEASON + ' per player per season\n' +
+            '• **Releases:** ' + constants.MAX_RELEASES_PER_TEAM + ' per season (window open only)\n' +
+            '• **Transfer Window:** Must be OPEN to use `/contract`\n' +
             '• **Rate Limits:** Prevents spam (2-4 second cooldowns)',
           inline: false,
         },

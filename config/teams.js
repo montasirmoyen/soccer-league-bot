@@ -28,8 +28,8 @@ module.exports = {
     "RIETI CALCIO": { ROLE_ID: '1538364394554138665', EMOJI_ID: '<:rieti_calcio:1533990509138280638>', manager: null, assistantManager: null, players: [] },
     "CELESTE": { ROLE_ID: '1538364407845752995', EMOJI_ID: '<:us_celeste:1533990267714277446>', manager: null, assistantManager: null, players: [] },
     "VALDORIA": { ROLE_ID: '1538364437373784155', EMOJI_ID: '<:ac_valdoria:1533990219559207083>', manager: null, assistantManager: null, players: [] },
-    "UNIONE VENICE": { ROLE_ID: '1538364454465703998', EMOJI_ID: '<:alpina_arrezo:1533990787027701800> ', manager: null, assistantManager: null, players: [] },
-    "ALPINA ARREZO": { ROLE_ID: '1538364401726525520', EMOJI_ID: '<:alpina_arrezo:1533990787027701800> ', manager: null, assistantManager: null, players: [] },
+    "UNIONE VENICE": { ROLE_ID: '1538364454465703998', EMOJI_ID: '<:unione_venice:1533990459058426006>', manager: null, assistantManager: null, players: [] },
+    "ALPINA ARREZO": { ROLE_ID: '1538364401726525520', EMOJI_ID: '<:alpina_arrezo:1533990787027701800>', manager: null, assistantManager: null, players: [] },
     "ROVENNA": { ROLE_ID: '1538364469741355008', EMOJI_ID: '<:ss_rovenna:1533990389361414228>', manager: null, assistantManager: null, players: [] },
     "LA FOGGIA": { ROLE_ID: '1538364463395373137', EMOJI_ID: '<:la_foggia:1533999396952342548>', manager: null, assistantManager: null, players: [] }
   }

@@ -22,15 +22,17 @@ module.exports = {
     return history ? history.signingsUsed : 0;
   },
 
-  contractPlayer: async (userId, teamName) => {
-    PlayerHistory.findOneAndUpdate(
-      { userId },
-      {
-        $inc: { signingsUsed: 1 },
-        $setOnInsert: { userId }
-      },
-      { new: true, upsert: true }
-    ).exec();
+  contractPlayer: async (userId, teamName, countSigning = true) => {
+    if (countSigning) {
+      await PlayerHistory.findOneAndUpdate(
+        { userId },
+        {
+          $inc: { signingsUsed: 1 },
+          $setOnInsert: { userId }
+        },
+        { new: true, upsert: true }
+      ).exec();
+    }
 
     const newContract = new Contract({ userId, teamName });
     return newContract.save();
@@ -81,7 +83,7 @@ module.exports = {
 
   getAllTeams: () => Team.find({}).sort({ name: 1 }).exec(),
 
-  // ── Transfer Window ────────────────────────────────────────────────────────
+  // ── League Configuration ────────────────────────────────────────────────────────
 
   getTransferWindowState: async () => {
     let config = await Configuration.findOne({ key: 'global' });
@@ -99,17 +101,19 @@ module.exports = {
       { new: true, upsert: true }
     ),
 
-  // ── Player History ─────────────────────────────────────────────────────────
-
-  getPlayerDemandsCount: async (userId) => {
-    const history = await PlayerHistory.findOne({ userId }).exec();
-    return history ? history.demandsUsed : 0;
+  getLeagueState: async () => {
+    let config = await Configuration.findOne({ key: 'global' });
+    if (!config) {
+      config = new Configuration({ key: 'global', leagueStarted: true });
+      await config.save();
+    }
+    return config.leagueStarted;
   },
 
-  incrementPlayerDemand: (userId) =>
-    PlayerHistory.findOneAndUpdate(
-      { userId },
-      { $inc: { demandsUsed: 1 } },
+  setLeagueState: (isStarted) =>
+    Configuration.findOneAndUpdate(
+      { key: 'global' },
+      { $set: { leagueStarted: isStarted } },
       { new: true, upsert: true }
     ),
 
@@ -123,7 +127,7 @@ module.exports = {
         return;
       }
 
-      console.log('🌱 [Seed] Empty database. Seeding 24 national teams...');
+      console.log(`🌱 [Seed] Empty database. Seeding ${Object.keys(configTeams.teams).length} teams...`);
 
       const teamsToCreate = Object.entries(configTeams.teams).map(([teamName, teamData]) => ({
         name: teamName,
@@ -134,7 +138,7 @@ module.exports = {
       }));
 
       await Team.insertMany(teamsToCreate);
-      console.log('✅ [Seed] All national teams registered.');
+      console.log(`✅ [Seed] All ${Object.keys(configTeams.teams).length} teams registered.`);
     } catch (error) {
       logError(error, null, { context: 'DB_SEEDING' });
     }

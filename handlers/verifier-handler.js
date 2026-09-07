@@ -19,6 +19,11 @@ const APP_CONFIG = {
   }
 };
 
+const KNOWN_ROBLOX_ROLES = new Map([
+  [APP_CONFIG.roblox.registeredRole.id, APP_CONFIG.roblox.registeredRole],
+  [APP_CONFIG.roblox.unverifiedRole.id, APP_CONFIG.roblox.unverifiedRole]
+]);
+
 let promotionQueue = [];
 let isProcessing = false;
 
@@ -49,59 +54,118 @@ async function sendLog(client, embed) {
   }
 }
 
-async function fetchRobloxUserData(guildId, memberId, roverApiKey) {
-  const apiUrl = `https://registry.rover.link/api/guilds/${guildId}/discord-to-roblox/${memberId}`;
+function getDiscordTarget(roleIds, registeredRoleId, unverifiedRoleId) {
+  const hasRegisteredRole = roleIds.includes(registeredRoleId);
+  const hasUnverifiedRole = roleIds.includes(unverifiedRoleId);
+
+  if (hasRegisteredRole && hasUnverifiedRole) return null;
+  if (hasRegisteredRole) return APP_CONFIG.roblox.registeredRole;
+  if (hasUnverifiedRole) return APP_CONFIG.roblox.unverifiedRole;
+  return null;
+}
+
+function isKnownTargetRole(targetRole) {
+  return Boolean(targetRole && KNOWN_ROBLOX_ROLES.get(targetRole.id) === targetRole);
+}
+
+function enqueuePromotion(newMember, targetRole) {
+  promotionQueue = promotionQueue.filter(({ newMember: queuedMember }) => queuedMember.id !== newMember.id);
+  promotionQueue.push({ newMember, targetRole });
+}
+
+async function sendPromotionSkippedLog(client, newMember, targetRole, reason, robloxData = null) {
+  if (targetRole.rank !== APP_CONFIG.roblox.registeredRole.rank) return;
+
+  const details = robloxData?.id
+    ? `Roblox: ${robloxData.username} (${robloxData.id})`
+    : 'Roblox account: not linked';
+  const skipEmbed = buildPSLEmbed(client, constants.WARNING_COLOR)
+    .setTitle('Promotion skipped')
+    .setDescription(`${newMember.user.tag} was not promoted to ${targetRole.name} (${targetRole.rank}).`)
+    .addFields({ name: 'Reason', value: reason }, { name: 'Details', value: details });
+
+  await sendLog(client, skipEmbed);
+}
+
+async function getRobloxUserProfile(robloxUsername) {
   try {
-    const response = await axios.get(apiUrl, {
-      headers: { Authorization: `Bearer ${roverApiKey}`, Accept: 'application/json' },
+    const userLookupUrl = `https://users.roblox.com/v1/usernames/users`;
+
+    const userLookupRes = await axios.post(userLookupUrl,
+      {
+        usernames: [robloxUsername]
+      },
+      {
+        headers: {
+          'x-api-key': apiKey,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    console.log(userLookupRes.data.data[0]);
+    return userLookupRes.data.data[0];
+  } catch (err) {
+    console.error(`❌ Failed looking up username "${robloxUsername}":`, err.response?.data || err.message);
+    return null;
+  }
+}
+
+async function getGroupMembership(robloxUserId) {
+  const url = `https://apis.roblox.com/cloud/v2/groups/${APP_CONFIG.groupId}/memberships`;
+  try {
+    const response = await axios.get(url, {
+      params: { filter: `user=='users/${robloxUserId}'` },
+      headers: { 'x-api-key': apiKey }
     });
-    return {
-      id: response.data?.robloxId,
-      username: response.data?.cachedUsername || 'Unknown'
-    };
+
+    const memberships = response.data.groupMemberships;
+    return (memberships && memberships.length > 0) ? memberships[0] : null;
   } catch (error) {
-    if (error.response && error.response.status === 404) {
-      return null;
+    console.error(`❌ Error looking up membership for Roblox user ${robloxUserId}: ${error.message}`);
+    return null;
+  }
+}
+
+async function updateGroupRoleset(membershipPath, targetRoleId, action) {
+  const allowedActions = ['assignRole', 'unassignRole'];
+  if (!allowedActions.includes(action)) {
+    throw new Error(`Invalid action. Must be one of: ${allowedActions.join(', ')}`);
+  }
+
+  const url = `https://apis.roblox.com/cloud/v2/${membershipPath}:${action}`;
+
+  try {
+    const response = await axios.post(
+      url,
+      {
+        role: `groups/${APP_CONFIG.groupId}/roles/${targetRoleId}`
+      },
+      {
+        headers: {
+          'x-api-key': apiKey,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    return { success: true, data: response.data };
+  } catch (error) {
+    const status = error.response?.status;
+    const message = error.response?.data?.message?.toLowerCase() || "";
+
+    if (action === 'assignRole' && (status === 409 || message.includes("already"))) {
+      return { success: true, alreadyOwned: true };
     }
+    if (action === 'unassignRole' && (status === 404 || message.includes("not found"))) {
+      return { success: true, notAssigned: true };
+    }
+
     throw error;
   }
 }
 
-async function getRobloxMembership(groupId, robloxId, apiKey) {
-  const url = `https://apis.roblox.com/cloud/v2/groups/${groupId}/memberships`;
-
-  const response = await axios.get(url, {
-    headers: { 'x-api-key': apiKey },
-    params: {
-      maxPageSize: 1,
-      filter: `user == 'users/${robloxId}'`
-    }
-  });
-
-  const memberships = response.data?.groupMemberships;
-  if (!memberships || memberships.length === 0) {
-    return null;
-  }
-
-  return memberships[0];
-}
-
-async function updateRobloxRole(groupId, membershipPath, targetRoleId, apiKey) {
-  const url = `https://apis.roblox.com/cloud/v2/${membershipPath}`;
-
-  const body = {
-    role: `groups/${groupId}/roles/${targetRoleId}`
-  };
-
-  await axios.patch(url, body, {
-    headers: {
-      'x-api-key': apiKey,
-      'Content-Type': 'application/json'
-    }
-  });
-}
-
-async function processQueue(client, keys) {
+async function processQueue(client) {
   if (isProcessing || promotionQueue.length === 0) return;
 
   isProcessing = true;
@@ -110,22 +174,21 @@ async function processQueue(client, keys) {
     const { newMember, targetRole } = promotionQueue.shift();
 
     try {
+      if (!newMember?.guild || !newMember.user || !isKnownTargetRole(targetRole)) {
+        console.warn('[verifier-handler.js] Refusing malformed promotion queue item.');
+        continue;
+      }
+
+      const memberGuildDisplayName = newMember.displayName
+      console.log(memberGuildDisplayName);
+
       const robloxData = await withRetry(() =>
-        fetchRobloxUserData(newMember.guild.id, newMember.id, keys.roverApiKey)
+        getRobloxUserProfile(memberGuildDisplayName)
       );
 
       if (!robloxData || !robloxData.id) {
         console.warn(`[verifier-handler.js] No linked Roblox account found for Discord user ${newMember.user.tag}`);
-        const missingRobloxEmbed = buildPSLEmbed(client, constants.WARNING_COLOR)
-          .setTitle('⚠️ Promotion Skipped: No Roblox Account Linked')
-          .setDescription(`Could not find a Roblox account linked via Rover for ${newMember.user}.`)
-          .addFields(
-            { name: 'Discord User', value: `${newMember.user.tag} (${newMember.id})`, inline: false },
-            { name: 'Guild', value: `${newMember.guild.name} (${newMember.guild.id})`, inline: false },
-            { name: 'Target Rank', value: `${targetRole.rank}`, inline: true },
-            { name: 'Reason', value: 'The member does not currently have a linked Roblox account through Rover.', inline: false }
-          );
-        await sendLog(client, missingRobloxEmbed);
+        await sendPromotionSkippedLog(client, newMember, targetRole, 'Could not fetch Roblox profile.');
         continue;
       }
 
@@ -133,39 +196,34 @@ async function processQueue(client, keys) {
       const robloxUsername = robloxData.username;
 
       const membership = await withRetry(() =>
-        getRobloxMembership(APP_CONFIG.groupId, robloxId, keys.robloxApiKey)
+        getGroupMembership(robloxId)
       );
 
       if (!membership) {
         console.warn(`[verifier-handler.js] User ${robloxId} is not in group ${APP_CONFIG.groupId}`);
-        const skipEmbed = buildPSLEmbed(client, constants.WARNING_COLOR)
-          .setTitle('⚠️ Promotion Skipped: User Not In Group')
-          .setDescription(`The Roblox user ${robloxUsername} is not currently a member of the configured group.`)
-          .addFields(
-            { name: 'Discord User', value: `${newMember.user.tag} (${newMember.id})`, inline: false },
-            { name: 'Roblox User', value: `${robloxUsername} (${robloxId})`, inline: false },
-            { name: 'Target Rank', value: `${targetRole.name} (${targetRole.rank})`, inline: true }
-          );
-        await sendLog(client, skipEmbed);
+        await sendPromotionSkippedLog(client, newMember, targetRole, 'The Roblox user is not in the configured group.', robloxData);
         continue;
       }
 
-      const currentRoleId = membership.role ? membership.role.split('/').pop() : null;
+      if (typeof membership.role !== 'string' || !membership.role.trim()) {
+        console.warn(`[verifier-handler.js] Refusing promotion with missing Roblox role for ${newMember.user.tag}`);
+        await sendPromotionSkippedLog(client, newMember, targetRole, 'The Roblox membership has no valid current role.', robloxData);
+        continue;
+      }
+
+      const currentRoleId = membership.role.split('/').pop();
+
+      if (currentRoleId && !KNOWN_ROBLOX_ROLES.has(currentRoleId)) {
+        console.warn(`[verifier-handler.js] Refusing to overwrite unknown Roblox role ${currentRoleId} for ${newMember.user.tag}`);
+        await sendPromotionSkippedLog(client, newMember, targetRole, `Unknown current Roblox role (${currentRoleId}).`, robloxData);
+        continue;
+      }
 
       if (currentRoleId && currentRoleId !== targetRole.id) {
-        let currentRoleName = 'Unknown';
-        let currentRankNumber = '?';
-
-        if (currentRoleId === APP_CONFIG.roblox.registeredRole.id) {
-          currentRoleName = APP_CONFIG.roblox.registeredRole.name;
-          currentRankNumber = APP_CONFIG.roblox.registeredRole.rank;
-        } else if (currentRoleId === APP_CONFIG.roblox.unverifiedRole.id) {
-          currentRoleName = APP_CONFIG.roblox.unverifiedRole.name;
-          currentRankNumber = APP_CONFIG.roblox.unverifiedRole.rank;
-        }
+        const currentRole = KNOWN_ROBLOX_ROLES.get(currentRoleId);
 
         await withRetry(() =>
-          updateRobloxRole(APP_CONFIG.groupId, membership.path, targetRole.id, keys.robloxApiKey)
+          updateGroupRoleset(membership.path, targetRole.id, 'assignRole')
         );
 
         console.log(`[verifier-handler.js] ✅ Successfully updated Roblox role (v2) for ${newMember.user.tag}`);
@@ -180,7 +238,7 @@ async function processQueue(client, keys) {
             { name: '🎮 Roblox Name', value: `[${robloxUsername}](https://www.roblox.com/users/${robloxId}/profile)`, inline: true },
             { name: '🆔 Roblox ID', value: `\`${robloxId}\``, inline: true },
             { name: '\u200B', value: '\u200B', inline: true },
-            { name: '🔑 Rank Update', value: `\`${currentRoleName} (${currentRankNumber})\` ➔ **${targetRole.name} (${targetRole.rank})**`, inline: false }
+            { name: '🔑 Rank Update', value: `\`${currentRole.name} (${currentRole.rank})\` ➔ **${targetRole.name} (${targetRole.rank})**`, inline: false }
           );
 
         await sendLog(client, successEmbed);
@@ -206,50 +264,36 @@ async function processQueue(client, keys) {
   isProcessing = false;
 
   if (promotionQueue.length > 0) {
-    processQueue(client, keys);
+    processQueue(client);
   }
 }
 
 function registerVerifierHandler(client) {
-  const keys = {
-    robloxApiKey: process.env.ROBLOX_API_KEY,
-    roverApiKey: process.env.ROVER_API_KEY,
-  };
-
-  if (!keys.robloxApiKey || !keys.roverApiKey) {
-    console.warn('[verifier-handler.js] ⚠️ Missing sensitive API keys in .env. Verification disabled.');
-    return;
-  }
-
   client.once(Events.ClientReady, () => {
-    console.log('[verifier-handler.js] 🌐 Roblox Open Cloud Engine (v2) initialized.');
+    console.log('[verifier-handler.js] 🌐 Roblox Open Cloud API Engine (v2) initialized.');
   });
 
   client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     try {
+      if (!newMember?.guild || !newMember.user) return;
+
       const currentRoleIds = [...newMember.roles.cache.keys()];
       const previousRoleIds = [...oldMember.roles.cache.keys()];
-      const hasRegisteredRole = currentRoleIds.includes(APP_CONFIG.discord.registeredRole);
-      const hasUnverifiedRole = currentRoleIds.includes(APP_CONFIG.discord.unverifiedRole);
 
-      const hadRegisteredRole = previousRoleIds.includes(APP_CONFIG.discord.registeredRole);
-      const hadUnverifiedRole = previousRoleIds.includes(APP_CONFIG.discord.unverifiedRole);
+      const currentHasRegistered = currentRoleIds.includes(APP_CONFIG.discord.registeredRole);
+      const currentHasUnverified = currentRoleIds.includes(APP_CONFIG.discord.unverifiedRole);
+      const previousHasRegistered = previousRoleIds.includes(APP_CONFIG.discord.registeredRole);
+      const previousHasUnverified = previousRoleIds.includes(APP_CONFIG.discord.unverifiedRole);
 
-      let currentTarget = null;
-      if (hasRegisteredRole) {
-        currentTarget = APP_CONFIG.roblox.registeredRole;
-      } else if (hasUnverifiedRole) {
-        currentTarget = APP_CONFIG.roblox.unverifiedRole;
+      if ((currentHasRegistered && currentHasUnverified) || (previousHasRegistered && previousHasUnverified)) {
+        console.warn(`[verifier-handler.js] Refusing ambiguous verification roles for ${newMember.user.tag}`);
+        return;
       }
 
-      let previousTarget = null;
-      if (hadRegisteredRole) {
-        previousTarget = APP_CONFIG.roblox.registeredRole;
-      } else if (hadUnverifiedRole) {
-        previousTarget = APP_CONFIG.roblox.unverifiedRole;
-      }
+      const currentTarget = getDiscordTarget(currentRoleIds, APP_CONFIG.discord.registeredRole, APP_CONFIG.discord.unverifiedRole);
+      const previousTarget = getDiscordTarget(previousRoleIds, APP_CONFIG.discord.registeredRole, APP_CONFIG.discord.unverifiedRole);
 
-      const hasRoleTransition = currentTarget && currentTarget.id !== previousTarget?.id;
+      const hasRoleTransition = isKnownTargetRole(currentTarget) && currentTarget.id !== previousTarget?.id;
       if (hasRoleTransition) {
         const plan = buildVerificationRoleChangePlan(currentRoleIds, currentTarget?.id, {
           registeredRoleId: APP_CONFIG.discord.registeredRole,
@@ -258,9 +302,11 @@ function registerVerifierHandler(client) {
 
         await syncMemberRoles(newMember, plan);
 
-        console.log(`[verifier-handler.js] 📝 Queuing Open Cloud v2 sync for ${newMember.user.tag}`);
-        promotionQueue.push({ newMember, targetRole: currentTarget });
-        processQueue(client, keys);
+        console.log(`[verifier-handler.js] 📝 Queuing Open Cloud API v2 sync for ${newMember.user.tag}`);
+        enqueuePromotion(newMember, currentTarget);
+        processQueue(client).catch((error) =>
+          logError(error, client, { context: 'ROBLOX_PROMOTION_QUEUE_ERROR' })
+        );
       }
     } catch (err) {
       await logError(err, client, { context: 'GUILD_MEMBER_UPDATE_EVENT_FAIL', userId: newMember?.id });

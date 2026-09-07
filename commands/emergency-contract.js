@@ -4,11 +4,12 @@ const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { canManageTeam, validateGuild } = require('../utils/validations');
+const { getTransferWindowSigningState } = require('../utils/transfer-window-permissions');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('emergency-contract')
-    .setDescription(`Emergency contract while window is CLOSED (Limit: ${constants.MAX_EMERGENCY_SIGNS_PER_TEAM} per team).`)
+    .setDescription(`Emergency contract while window is CLOSED (Limit: ${constants.MAX_EMERGENCY_SIGNS_PER_TEAM} per team)`)
     .addStringOption((option) =>
       option.setName('team').setDescription('Select the team').setRequired(true)
         .addChoices(builderHelpers.getTeamChoices())
@@ -32,8 +33,8 @@ module.exports = {
     }
 
     try {
-      const [isWindowOpen, teamInfo, isStaffSomewhere, activeContract, currentSquad] = await Promise.all([
-        database.getTransferWindowState(),
+      const [signingState, teamInfo, isStaffSomewhere, activeContract, currentSquad] = await Promise.all([
+        getTransferWindowSigningState(selectedTeam),
         database.getTeamInfo(selectedTeam),
         database.isUserStaffAnywhere(userId),
         database.getContractedTeam(userId),
@@ -42,8 +43,11 @@ module.exports = {
 
       const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam)}**`;
 
-      if (isWindowOpen) {
+      if (signingState.isWindowOpen) {
         return interaction.editReply({ content: '❌ The window is **OPEN**. Use `/contract` instead.', flags: MessageFlags.Ephemeral });
+      }
+      if (signingState.isAllowedWhileClosed) {
+        return interaction.editReply({ content: '✅ This team is allowed to sign freely while the window is closed. Use `/contract` instead.', flags: MessageFlags.Ephemeral });
       }
       if (!canManageTeam(interaction.member, teamInfo)) {
         return interaction.editReply({ content: `❌ You do not have permission to sign players for ${formattedTeamName}.`, flags: MessageFlags.Ephemeral });

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
@@ -38,7 +38,7 @@ module.exports = {
     try {
       const staffRecord = await database.isUserStaffAnywhere(userId);
       if (!staffRecord) {
-        return interaction.editReply({ content: '❌ You are not an authorized manager.', ephemeral: true });
+        return interaction.editReply({ content: '❌ You are not an authorized manager.', flags: MessageFlags.Ephemeral });
       }
 
       const cooldownAmount = 3 * 60 * 60 * 1000;
@@ -47,14 +47,15 @@ module.exports = {
 
       if (cooldownState.isCoolingDown) {
         return interaction.editReply({
-          content: `⏰ You're on cooldown! You can scout again in ${builderHelpers.formatCooldownDuration(cooldownState.timeLeftMs)}.`,
-          ephemeral: true,
+          content: `⏰ You're on cooldown! You can scout again in **${builderHelpers.formatCooldownDuration(cooldownState.timeLeftMs)}**.`,
+          flags: MessageFlags.Ephemeral
         });
       }
 
       cooldowns.set(userId, now);
       setTimeout(() => cooldowns.delete(userId), cooldownAmount);
 
+      const role = await builderHelpers.getTeamRole(interaction.client, staffRecord.name);
       const formattedTeamName = builderHelpers.getFormattedTeamName(staffRecord.name);
       const embed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
         .setTitle('🔍 Player Scout')
@@ -68,14 +69,14 @@ module.exports = {
 
       const targetChannel = await interaction.client.channels.fetch(constants.SCOUT_CHANNEL_ID);
       if (targetChannel) {
-        await targetChannel.send({ embeds: [embed] });
-        await interaction.editReply({ content: '✅ Your scouting message has been posted!', ephemeral: true });
+        await targetChannel.send({ content: `<@${userId}>`, embeds: [embed] });
+        await interaction.editReply({ content: '✅ Your scouting message has been posted!', flags: MessageFlags.Ephemeral });
       } else {
-        await interaction.editReply({ content: '⚠️ Could not find the scouting channel.', ephemeral: true });
+        await interaction.editReply({ content: '⚠️ Could not find the scouting channel.', flags: MessageFlags.Ephemeral });
       }
     } catch (error) {
       console.error('❌ Error in /scout:', error);
-      return interaction.editReply({ content: '❌ An error occurred while posting your scout.', ephemeral: true });
+      return interaction.editReply({ content: '❌ An error occurred while posting your scout.', flags: MessageFlags.Ephemeral });
     }
   },
 };

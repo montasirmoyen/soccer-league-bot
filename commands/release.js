@@ -65,6 +65,13 @@ module.exports = {
         });
       }
 
+      if (userId === interaction.user.id && !isChairman(interaction.member)) {
+        return interaction.editReply({
+          content: `❌ You cannot release yourself from ${formattedTeamName}.`,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
       const isManager   = teamInfo.manager          === userId;
       const isAssistant = teamInfo.assistantManager === userId;
       const isStaff     = isManager || isAssistant;
@@ -113,7 +120,7 @@ module.exports = {
             .catch(() => null);
           if (releaseChannel) {
             const releaseEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
-              .setTitle(`${formattedTeamName} OFFICIAL RELEASE`)
+              .setTitle(`${formattedTeamName} Official Release`)
               .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
               .addFields([
                 {

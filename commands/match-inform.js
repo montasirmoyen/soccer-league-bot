@@ -5,6 +5,8 @@ const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { isRefereeOrAdmin, validateGuild } = require('../utils/validations');
 const constants = require('../config/constants');
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('match-inform')
@@ -110,6 +112,8 @@ module.exports = {
           const user = await interaction.client.users.fetch(userId);
           await user.send({ content: `<@${userId}>`, embeds: [matchEmbed] });
           sent++;
+
+          await sleep(250);
         } catch {
           failed++;
         }

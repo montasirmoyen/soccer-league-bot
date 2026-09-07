@@ -5,7 +5,7 @@ function startHealthServer() {
   const port = 8000;
 
   app.get('/', (req, res) => res.send('Bot is online!'));
-  app.listen(port, () => console.log(`Uptime server is running on port ${port}`));
+  app.listen(port, () => console.log(`🔌 Uptime server is running on port ${port}`));
 }
 
 module.exports = { startHealthServer };

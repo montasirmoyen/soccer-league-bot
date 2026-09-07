@@ -29,7 +29,7 @@ module.exports = {
             database.getTeamInfo(activeContract.teamName).catch(() => null),
             builderHelpers.getTeamRole(member.client, activeContract.teamName).catch(() => null)
           ]);
-          const formattedTeamName = `**${builderHelpers.getFormattedTeamName(activeContract.teamName).toUpperCase()}**`;
+          const formattedTeamName = `**${builderHelpers.getFormattedTeamName(activeContract.teamName)}**`;
           const staffMentions = [
             teamInfo?.manager ? `<@${teamInfo.manager}>` : null,
             teamInfo?.assistantManager ? `<@${teamInfo.assistantManager}>` : null,
@@ -37,7 +37,7 @@ module.exports = {
           const mentionContent = staffMentions.length > 0 ? staffMentions.join(' ') : null;
 
           const embed = buildPSLEmbed(member.client, role?.color || constants.DEFAULT_EMBED_COLOR)
-            .setTitle(`${formattedTeamName} AUTOMATIC RELEASE`)
+            .setTitle(`${formattedTeamName} Automatic Release`)
             .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
             .addFields({
               name: 'Player Released',
@@ -64,7 +64,7 @@ module.exports = {
           const appointmentsChannel = await member.client.channels.fetch(constants.APPOINTMENTS_CHANNEL_ID).catch(() => null);
           if (appointmentsChannel) {
             const role = await builderHelpers.getTeamRole(member.client, staffPosition.name).catch(() => null);
-            const formattedTeamName = `**${builderHelpers.getFormattedTeamName(staffPosition.name).toUpperCase()}**`;
+            const formattedTeamName = `**${builderHelpers.getFormattedTeamName(staffPosition.name)}**`;
             const staffMentions = [
               teamInfo.manager ? `<@${teamInfo.manager}>` : null,
               teamInfo.assistantManager ? `<@${teamInfo.assistantManager}>` : null,
@@ -73,7 +73,7 @@ module.exports = {
             const mentionContent = staffMentions.length > 0 ? staffMentions.join(' ') : null;
 
             const embed = buildPSLEmbed(member.client, role?.color || constants.DEFAULT_EMBED_COLOR)
-              .setTitle(`${formattedTeamName} AUTOMATIC STAFF CLEARANCE`)
+              .setTitle(`${formattedTeamName} Automatic Staff Clearance`)
               .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
               .addFields({
                 name: 'Position Cleared',

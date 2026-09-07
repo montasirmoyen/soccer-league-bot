@@ -10,15 +10,16 @@ const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { canManageTeam, validateGuild, isRegistered } = require('../utils/validations');
+const { getTransferWindowSigningState } = require('../utils/transfer-window-permissions');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('contract')
-    .setDescription("Sends a contract offer to a player's DM.")
+    .setDescription("Sends a contract offer to a player's DM")
     .addStringOption((option) =>
       option
         .setName('team')
-        .setDescription('Select your national team')
+        .setDescription('Select your team')
         .setRequired(true)
         .addChoices(builderHelpers.getTeamChoices()),
     )
@@ -64,8 +65,8 @@ module.exports = {
     }
 
     try {
-      const [isWindowOpen, isLeagueStarted, teamInfo, isStaffSomewhere, activeContract, currentSquad] = await Promise.all([
-        database.getTransferWindowState(),
+      const [signingState, isLeagueStarted, teamInfo, isStaffSomewhere, activeContract, currentSquad] = await Promise.all([
+        getTransferWindowSigningState(selectedTeam),
         database.getLeagueState(),
         database.getTeamInfo(selectedTeam),
         database.isUserStaffAnywhere(userId ),
@@ -75,7 +76,13 @@ module.exports = {
 
       const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam)}**`;
 
-      if (!isWindowOpen) {
+      if (signingState.isDenied) {
+        return interaction.editReply({
+          content: '🚫 This team is currently **denied from regular signings**.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+      if (!signingState.isWindowOpen && !signingState.isAllowedWhileClosed) {
         return interaction.editReply({
           content: '🔒 The transfer window is currently **CLOSED**. Use `/emergency-contract` instead.',
           flags: MessageFlags.Ephemeral,

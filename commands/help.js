@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
@@ -140,10 +140,10 @@ module.exports = {
         }
       );
 
-      await interaction.editReply({ embeds: [mainEmbed], ephemeral: true });
+      await interaction.editReply({ embeds: [mainEmbed], flags: MessageFlags.Ephemeral });
     } catch (error) {
       console.error('❌ Error in /help:', error);
-      return interaction.editReply({ content: '❌ An error occurred generating help.', ephemeral: true });
+      return interaction.editReply({ content: '❌ An error occurred generating help.', flags: MessageFlags.Ephemeral });
     }
   },
 };

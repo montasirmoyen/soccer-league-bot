@@ -10,7 +10,7 @@ const { updateTeamsRoster } = require('../utils/roster-updater');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('appoint')
-    .setDescription('Appoints or removes a Manager / Assistant Manager for a team.')
+    .setDescription('Appoints or removes a Manager / Assistant Manager for a team')
     .addStringOption((option) =>
       option
         .setName('team')
@@ -109,10 +109,9 @@ module.exports = {
             const appointmentsChannel = await interaction.client.channels
               .fetch(constants.APPOINTMENTS_CHANNEL_ID)
               .catch(() => null);
-
             if (appointmentsChannel) {
               const clearEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
-                .setTitle(`${formattedTeamName} OFFICIAL STAFF CLEARANCE 🧹`)
+                .setTitle(`${formattedTeamName} Official Staff Clearance 🧹`)
                 .addFields({
                   name: 'Position Cleared',
                   value: clearedUser
@@ -124,14 +123,8 @@ module.exports = {
                 clearEmbed.setThumbnail(clearedUser.displayAvatarURL({ dynamic: true }));
               }
 
-              const mentions = [
-                clearedUser ? `<@${currentStaffId}>` : null,
-                `<@&${teamInfo.roleId}>`
-              ]
-                .filter(Boolean)
-                .join(' ');
-
-              await appointmentsChannel.send({ content: mentions, embeds: [clearEmbed] }).catch(console.warn);
+              const mention = `<@&${teamInfo.roleId}>`;
+              await appointmentsChannel.send({ content: mention, embeds: [clearEmbed] }).catch(console.warn);
             }
 
             await updateTeamsRoster(interaction.client);
@@ -153,9 +146,10 @@ module.exports = {
         });
       }
 
-      const [isStaffElsewhere, existingContract] = await Promise.all([
+      const [isStaffElsewhere, existingContract, currentTeamStaff] = await Promise.all([
         database.isUserStaffAnywhere(appointeeId),
         database.getContractedTeam(appointeeId),
+        database.getTeamStaff(selectedTeam, selectedRole)
       ]);
 
       if (isTeamManager(teamInfo, appointeeId) && selectedRole !== 'assistant') {
@@ -165,9 +159,10 @@ module.exports = {
         });
       }
 
-      if (teamInfo.manager === appointeeId || teamInfo.assistantManager === appointeeId) {
+      if (teamInfo.manager || teamInfo.assistantManager) {
+        const currentStaffId = isRoleManager ? teamInfo.manager : teamInfo.assistantManager;
         return interaction.editReply({
-          content: `❌ <@${appointeeId}> is already in the management of this team. Clear their current role first.`,
+          content: `❌ <@${currentStaffId}> is already in the management of this team. Clear their current role first.`,
           flags: MessageFlags.Ephemeral
         });
       }
@@ -228,7 +223,7 @@ module.exports = {
             .catch(() => null);
           if (appointmentsChannel) {
             const appointEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
-              .setTitle(`${formattedTeamName} OFFICIAL APPOINTMENT`)
+              .setTitle(`${formattedTeamName} Official Staff Appointment`)
               .setThumbnail(appointee.displayAvatarURL({ dynamic: true }))
               .addFields(
                 {
@@ -241,8 +236,8 @@ module.exports = {
                 },
               );
 
-            const mentions = [`<@${appointeeId}>`, `<@&${teamInfo.roleId}>`].join(' ');
-            await appointmentsChannel.send({ content: mentions, embeds: [appointEmbed] }).catch(console.warn);
+            const mention = `<@&${teamInfo.roleId}>`;
+            await appointmentsChannel.send({ content: mention, embeds: [appointEmbed] }).catch(console.warn);
           }
 
           await updateTeamsRoster(interaction.client);

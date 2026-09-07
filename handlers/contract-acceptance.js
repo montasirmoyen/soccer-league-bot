@@ -3,6 +3,7 @@ const constants = require('../config/constants');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { safeFetchMember, safeRoleAdd } = require('../utils/discord-helpers');
 const { logError } = require('../utils/error-handler');
+const { getTransferWindowSigningState } = require('../utils/transfer-window-permissions');
 
 function buildLockedRow(existingComponents = []) {
   return existingComponents.map((row) => {
@@ -149,15 +150,28 @@ function createContractAcceptanceHandler(dependencies) {
         return failWithEmbed('❌ Signing Failed', `${formattedTeamName} has used all available emergency signing spots.`);
       }
 
-      const [isWindowOpen, isLeagueOpen, activeContract, squadSize] = await Promise.all([
-        database.getTransferWindowState(),
+      const [signingState, isLeagueOpen, activeContract, squadSize] = await Promise.all([
+        getTransferWindowSigningState(teamName),
         database.getLeagueState(),
         database.getContractedTeam(userId),
         database.getPlayersByTeam(teamName),
       ]);
 
-      if (!isEmergency && !isWindowOpen) {
-        return failWithEmbed('❌ Signing Failed', 'The transfer window **closed** while you were reviewing this offer.');
+      if (signingState.isDenied && !isEmergency) {
+        return failWithEmbed('❌ Signing Failed', `${formattedTeamName} is currently **denied from regular signings**.`);
+      }
+
+      if (isEmergency && (signingState.isWindowOpen || signingState.isAllowedWhileClosed)) {
+        return failWithEmbed(
+          '❌ Signing Failed',
+          signingState.isWindowOpen
+            ? 'The transfer window **opened** while you were reviewing this offer. Use a regular contract instead.'
+            : `${formattedTeamName} is allowed to sign freely while the transfer window is closed. Use a regular contract instead.`
+        );
+      }
+
+      if (!isEmergency && !signingState.isWindowOpen && !signingState.isAllowedWhileClosed) {
+        return failWithEmbed('❌ Signing Failed', 'The transfer window is **closed** and this team is not on the allowed list.');
       }
 
       if (activeContract) {
@@ -203,8 +217,8 @@ function createContractAcceptanceHandler(dependencies) {
             const signingEmbed = buildPSLEmbed(client, embedColor)
             .setTitle(
               isEmergency
-                ? `🚨 ${formattedTeamName} EMERGENCY SIGNING`
-                : `${formattedTeamName} OFFICIAL SIGNING`
+                ? `🚨 ${formattedTeamName} Emergency Signing`
+                : `${formattedTeamName} Official Signing`
             )
             .setThumbnail(interaction.user.displayAvatarURL());
 
@@ -269,6 +283,12 @@ function createContractAcceptanceHandler(dependencies) {
 
     if (userId !== targetPlayerId) {
       return interaction.reply({ content: '❌ This button is not for you.', ephemeral: true });
+    }
+
+    const teamInfo = await database.getTeamInfo(teamName);
+    if (!teamInfo) {
+      console.log('[contract-acceptance] Team not found in database:', teamName);
+      return interaction.reply({ content: '❌ The team you are trying to sign with does not exist.', ephemeral: true });
     }
 
     const messageId = interaction.message.id;

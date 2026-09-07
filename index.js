@@ -6,6 +6,7 @@ const {
   GatewayIntentBits,
   ActivityType,
   Events,
+  MessageFlags
 } = require('discord.js');
 const { loadCommands }             = require('./bot/load-commands');
 const { registerCommands }         = require('./bot/register-commands');
@@ -50,7 +51,7 @@ const TIMERS = {
 };
 
 const MANAGING_COMMANDS = [
-  'contract', 'emergency-sign', 'release', 'scout', 'scrim', 'appoint', 'announce',
+  'contract', 'emergency-contract', 'release', 'scout', 'scrim', 'appoint', 'disband', 'appoint'
 ];
 
 const userCooldowns    = new Map();
@@ -154,7 +155,7 @@ async function bootstrap() {
   const commands = loadCommands(client);
   await registerCommands(commands);
 
-  registerVerifierHandler(client);
+  // registerVerifierHandler(client);
 
   const contractAcceptance = createContractAcceptanceHandler({
     database,
@@ -201,18 +202,18 @@ async function bootstrap() {
     if (hasUserCooldown(userId, command)) {
       return safeReply(interaction, {
         content:   `⏳ Please wait before using /${command} again.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral
       });
     }
 
-    console.log(`\n⚡ /${interaction.commandName} by ${interaction.user.tag}`);
+    console.log(`\n⚡ /${interaction.commandName} by ${interaction.user.tag} (${interaction.user.id})`);
 
     const commandData = client.commands.get(interaction.commandName);
     if (!commandData) return;
 
     try {
       if (!interaction.deferred && !interaction.replied && interaction.commandName !== 'announce') {
-        await safeDeferReply(interaction, { ephemeral: true });
+        await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
       }
 
       await withTimeout(
@@ -232,23 +233,23 @@ async function bootstrap() {
         console.warn(`⏱️  /${command} timed out for ${interaction.user.tag}`);
         await safeRespond(interaction, {
           content:   '⏱️ This is taking longer than expected. Please try again in a moment.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral
         });
         return;
       }
 
       await logError(error, client, { userId, command, context: 'SLASH_COMMAND_EXECUTION_ERROR' });
       await safeRespond(interaction, {
-        content:   '❌ Something went wrong on our end. Please try again, and let staff know if it keeps happening.',
-        ephemeral: true,
+        content:   '❌ Something went wrong on our end. Please try again, and open a ticket if it keeps happening.',
+        flags: MessageFlags.Ephemeral
       });
     }
   });
 
-  await client.login(process.env.TOKEN || process.env.DISCORD_TOKEN);
+  await client.login(process.env.DISCORD_TOKEN);
 }
 
-bootstrap().catch((err) => {
-  console.error('❌ Startup failed:', err);
+bootstrap().catch((startupError) => {
+  console.error(`❌ Startup failed: ${startupError}`);
   process.exit(1);
 });

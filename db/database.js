@@ -34,13 +34,13 @@ module.exports = {
       ).exec();
     }
 
-    const newContract = new Contract({ userId, teamName });
+    const newContract = new Contract({ userId, teamName: teamName.toUpperCase() });
     return newContract.save();
   },
 
   releasePlayer: (userId) => Contract.deleteOne({ userId }),
 
-  getPlayersByTeam: (teamName) => Contract.find({ teamName }).exec(),
+  getPlayersByTeam: (teamName) => Contract.find({ teamName: teamName.toUpperCase() }).exec(),
 
   getAllContracts: () => Contract.find({}).exec(),
 
@@ -54,6 +54,15 @@ module.exports = {
 
   isUserStaffAnywhere: (userId) =>
     Team.findOne({ $or: [{ manager: userId }, { assistantManager: userId }] }).exec(),
+
+  disbandTeam: async (teamName) => {
+    await Contract.deleteMany({ teamName: teamName.toUpperCase() }).exec();
+    return Team.findOneAndUpdate(
+      { name: teamName.toUpperCase() },
+      { $set: { manager: null, assistantManager: null } },
+      { new: true }
+    );
+  },
 
   appointStaff: (teamName, userId, roleType) => {
     const update = roleType === 'manager'
@@ -99,6 +108,43 @@ module.exports = {
       { key: 'global' },
       { $set: { transferWindowOpened: isOpen } },
       { new: true, upsert: true }
+    ),
+
+  getTransferWindowConfig: async () => {
+    let config = await Configuration.findOne({ key: 'global' });
+    if (!config) {
+      config = new Configuration({ key: 'global' });
+      await config.save();
+    }
+    return config;
+  },
+
+  addTransferWindowAllowedTeam: (teamName) =>
+    Configuration.findOneAndUpdate(
+      { key: 'global' },
+      { $addToSet: { transferWindowAllowedTeams: teamName } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ),
+
+  removeTransferWindowAllowedTeam: (teamName) =>
+    Configuration.findOneAndUpdate(
+      { key: 'global' },
+      { $pull: { transferWindowAllowedTeams: teamName } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ),
+
+  addTransferWindowDeniedTeam: (teamName) =>
+    Configuration.findOneAndUpdate(
+      { key: 'global' },
+      { $addToSet: { transferWindowDeniedTeams: teamName } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ),
+
+  removeTransferWindowDeniedTeam: (teamName) =>
+    Configuration.findOneAndUpdate(
+      { key: 'global' },
+      { $pull: { transferWindowDeniedTeams: teamName } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
     ),
 
   getLeagueState: async () => {

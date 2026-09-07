@@ -4,12 +4,12 @@ const constants = require('../config/constants');
 const { isChairman, validateGuild } = require('../utils/validations');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 
-const LEAGUE_EMBED_TITLE = '⚽ LEAGUE STATUS UPDATE';
+const LEAGUE_EMBED_TITLE = '⚽ League Status';
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('league-start')
-    .setDescription('Starts or closes the league.')
+    .setDescription('Starts or closes the league')
     .addBooleanOption((option) =>
       option.setName('status').setDescription('True = Started, False = Closed').setRequired(true)
     ),
@@ -53,8 +53,8 @@ module.exports = {
           .setTitle(LEAGUE_EMBED_TITLE)
           .setDescription(
             targetLeagueStatus
-              ? 'The league is now **STARTED**! Team releases and Players Signings are counting.'
-              : 'The league is now **CLOSED**! Team releases and Players Signings are not counting.'
+              ? 'The league is now **STARTED**! Releases and player signings are counting.'
+              : 'The league is now **CLOSED**! Team releases and player signings are not counting.'
           );
 
         const messagePayload = { content: targetLeagueStatus ? '🟢' : '🔴', embeds: [embed] };

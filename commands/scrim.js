@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
@@ -50,13 +50,13 @@ module.exports = {
     try {
       const member = await interaction.guild.members.fetch(userId).catch(() => null);
       if (!member) {
-        return interaction.editReply({ content: '❌ Could not verify your membership.', ephemeral: true });
+        return interaction.editReply({ content: '❌ Could not verify your membership.', flags: MessageFlags.Ephemeral });
       }
 
       if (!member.roles.cache.has(SCRIM_HOSTER_ROLE_ID) && !member.roles.cache.has(STAFF_ROLE_ID)) {
         return interaction.editReply({
           content: '❌ You do not have permission to use this command.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -65,7 +65,7 @@ module.exports = {
       if (cooldownState.isCoolingDown) {
         return interaction.editReply({
           content: `⏳ Please wait ${builderHelpers.formatCooldownDuration(cooldownState.timeLeftMs)} before using this command again.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -80,7 +80,7 @@ module.exports = {
       const displayName = builderHelpers.getDiscordDisplayName(member, user);
       const pingString = `<@${userId}> <@&${SCRIM_PING_ROLE_ID}>`;
 
-      const embed = buildPSLEmbed(interaction.client, 0x3af3e3)
+      const embed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
         .setTitle(`**${displayName}** is hosting a scrim!`)
         .setThumbnail(user.displayAvatarURL())
         .addFields(
@@ -91,7 +91,7 @@ module.exports = {
         .addFields({
           name: '\u200b',
           value:
-            '[Click here to join!](https://www.roblox.com/games/88920112778598/Pure-Soccer)',
+            '[**__Click here to join!__**](https://www.roblox.com/games/88920112778598/Pure-Soccer)',
           inline: false
         });
 
@@ -101,11 +101,11 @@ module.exports = {
 
       const channel = await interaction.client.channels.fetch(SCRIM_CHANNEL_ID);
       await channel.send({ content: pingString, embeds: [embed] });
-      await interaction.editReply({ content: '✅ Your scrim announcement has been sent!', ephemeral: true });
+      await interaction.editReply({ content: '✅ Your scrim announcement has been sent! **Best of luck!**', flags: MessageFlags.Ephemeral });
     } catch (error) {
       console.error('❌ Error in /scrim:', error);
       cooldowns.delete(userId);
-      await interaction.editReply({ content: '❌ Failed to send scrim announcement.', ephemeral: true });
+      await interaction.editReply({ content: '❌ Failed to send scrim announcement.', flags: MessageFlags.Ephemeral });
     }
   },
 };

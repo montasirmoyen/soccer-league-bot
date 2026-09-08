@@ -159,8 +159,8 @@ module.exports = {
         });
       }
 
-      if (teamInfo.manager || teamInfo.assistantManager) {
-        const currentStaffId = isRoleManager ? teamInfo.manager : teamInfo.assistantManager;
+      const currentStaffId = isRoleManager ? teamInfo.manager : teamInfo.assistantManager;
+      if (currentStaffId) {
         return interaction.editReply({
           content: `❌ <@${currentStaffId}> is already in the management of this team. Clear their current role first.`,
           flags: MessageFlags.Ephemeral
@@ -236,8 +236,8 @@ module.exports = {
                 },
               );
 
-            const mention = `<@&${teamInfo.roleId}>`;
-            await appointmentsChannel.send({ content: mention, embeds: [appointEmbed] }).catch(console.warn);
+            const mentions = `<@${appointeeId}> <@&${teamInfo.roleId}>`;
+            await appointmentsChannel.send({ content: mentions, embeds: [appointEmbed] }).catch(console.warn);
           }
 
           await updateTeamsRoster(interaction.client);

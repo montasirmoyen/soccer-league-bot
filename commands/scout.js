@@ -57,7 +57,7 @@ module.exports = {
 
       const role = await builderHelpers.getTeamRole(interaction.client, staffRecord.name);
       const formattedTeamName = builderHelpers.getFormattedTeamName(staffRecord.name);
-      const embed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
+      const embed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
         .setTitle('🔍 Player Scout')
         .setDescription(
           `**${formattedTeamName}** is scouting for players!\n\n` +

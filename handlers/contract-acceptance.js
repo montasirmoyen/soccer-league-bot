@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, MessageFlags } = require('discord.js');
 const constants = require('../config/constants');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { safeFetchMember, safeRoleAdd } = require('../utils/discord-helpers');
@@ -282,18 +282,18 @@ function createContractAcceptanceHandler(dependencies) {
     const userId = interaction.user.id;
 
     if (userId !== targetPlayerId) {
-      return interaction.reply({ content: '❌ This button is not for you.', ephemeral: true });
+      return interaction.reply({ content: '❌ This button is not for you.', flags: MessageFlags.Ephemeral });
     }
 
     const teamInfo = await database.getTeamInfo(teamName);
     if (!teamInfo) {
       console.log('[contract-acceptance] Team not found in database:', teamName);
-      return interaction.reply({ content: '❌ The team you are trying to sign with does not exist.', ephemeral: true });
+      return interaction.reply({ content: '❌ The team you are trying to sign with does not exist.', flags: MessageFlags.Ephemeral });
     }
 
     const messageId = interaction.message.id;
     if (hasButtonCooldown(userId, messageId)) {
-      return interaction.reply({ content: '⏳ You already responded to this offer.', ephemeral: true });
+      return interaction.reply({ content: '⏳ You already responded to this offer.', flags: MessageFlags.Ephemeral });
     }
 
     setButtonCooldown(userId, messageId);

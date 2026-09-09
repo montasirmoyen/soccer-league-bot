@@ -159,7 +159,6 @@ module.exports = {
         });
       }
 
-      const currentStaffId = isRoleManager ? teamInfo.manager : teamInfo.assistantManager;
       if (currentStaffId) {
         return interaction.editReply({
           content: `❌ <@${currentStaffId}> is already in the management of this team. Clear their current role first.`,

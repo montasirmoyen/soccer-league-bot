@@ -15,7 +15,7 @@ const database                     = require('./db/database');
 const constants                    = require('./config/constants');
 const { safeReply, safeDeferReply } = require('./utils/discord-helpers');
 const { logError, replyWithError } = require('./utils/error-handler');
-const { registerVerifierHandler }  = require('./handlers/verifier-handler');
+const { registerGroupRankingHandler } = require('./handlers/group-ranking');
 const { createContractAcceptanceHandler } = require('./handlers/contract-acceptance');
 const guildMemberRemoveEvent       = require('./handlers/guild-member-remove');
 const { updateTeamsRoster }        = require('./utils/roster-updater');
@@ -155,7 +155,7 @@ async function bootstrap() {
   const commands = loadCommands(client);
   await registerCommands(commands);
 
-  // registerVerifierHandler(client);
+  registerGroupRankingHandler(client);
 
   const contractAcceptance = createContractAcceptanceHandler({
     database,

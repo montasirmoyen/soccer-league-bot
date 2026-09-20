@@ -11,7 +11,7 @@ module.exports = {
     .setName('roster')
     .setDescription('Displays the official roster for a team.')
     .addStringOption((option) =>
-      option.setName('team').setDescription('Select the national team').setRequired(true)
+      option.setName('team').setDescription('Select the team').setRequired(true)
         .addChoices(builderHelpers.getTeamChoices())
     ),
 
@@ -22,11 +22,10 @@ module.exports = {
 
     const selectedTeam = interaction.options.getString('team');
     try {
-      const [teamInfo, contractedPlayers, role, isLeagueOpen] = await Promise.all([
+      const [teamInfo, contractedPlayers, role] = await Promise.all([
         database.getTeamInfo(selectedTeam),
         database.getPlayersByTeam(selectedTeam),
-        builderHelpers.getTeamRole(interaction.client, selectedTeam),
-        database.getLeagueState(),
+        builderHelpers.getTeamRole(interaction.client, selectedTeam)
       ]);
 
       const rawIds = contractedPlayers.map(p => p.userId);
@@ -65,12 +64,8 @@ module.exports = {
         { name: '🚨 Emergency Signs', value: `**${teamInfo?.emergencySignsUsed ?? 0}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}** used`, inline: false },
       ];
 
-      if (isLeagueOpen) {
-        rosterFields.push({ name: '🧹 Releases', value: `**${teamInfo?.releasesUsed ?? 0}/${constants.MAX_RELEASES_PER_TEAM}** used`, inline: false });
-      }
-
       const rosterEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
-        .setTitle(`${formattedTeamName} OFFICIAL ROSTER`)
+        .setTitle(`${formattedTeamName} Official Roster`)
         .addFields(rosterFields);
 
       return interaction.editReply({ embeds: [rosterEmbed], flags: MessageFlags.Ephemeral });

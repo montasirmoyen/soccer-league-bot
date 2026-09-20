@@ -5,6 +5,18 @@ const { safeFetchMember, safeRoleAdd } = require('../utils/discord-helpers');
 const { logError } = require('../utils/error-handler');
 const { getTransferWindowSigningState } = require('../utils/transfer-window-permissions');
 
+const CONTRACT_BUTTON_ACTIONS = new Set([
+  'accept',
+  'refuse',
+  'emergencyaccept',
+  'emergencyrefuse',
+]);
+
+function isContractAcceptanceButton(customId) {
+  const parts = customId.split('_');
+  return parts.length === 4 && CONTRACT_BUTTON_ACTIONS.has(parts[0]);
+}
+
 function buildLockedRow(existingComponents = []) {
   return existingComponents.map((row) => {
     const newRow = new ActionRowBuilder();
@@ -124,10 +136,9 @@ function createContractAcceptanceHandler(dependencies) {
   }
 
   async function processAcceptance(interaction, client, teamName, userId, issuerId, isEmergency) {
-    const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName).toUpperCase()}**`;
+    const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName)}**`;
 
     const failWithEmbed = async (title, description) => {
-      // Corrigido para usar interaction.editReply
       await interaction.editReply({
           embeds: [
             buildPSLEmbed(client, constants.DEFAULT_EMBED_COLOR)
@@ -231,7 +242,7 @@ function createContractAcceptanceHandler(dependencies) {
                 { name: 'Emergency Contracts Used', value: `**${emergencySignsUsed}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}**` },
               ];
               if (isLeagueOpen) {
-                signingFields.push({ name: 'Player Signings Used', value: `**${signingsText}**` });
+                signingFields.push({ name: 'Individual Signings Used', value: `**${signingsText}**` });
               }
               signingEmbed.addFields(signingFields);
             } else {
@@ -278,6 +289,8 @@ function createContractAcceptanceHandler(dependencies) {
   }
 
   async function handleButtonInteraction(interaction, client) {
+    if (!isContractAcceptanceButton(interaction.customId)) return false;
+
     const [action, teamName, targetPlayerId, issuerId] = interaction.customId.split('_');
     const userId = interaction.user.id;
 
@@ -337,7 +350,7 @@ function createContractAcceptanceHandler(dependencies) {
     }
   }
 
-  return { handleButtonInteraction, handleRefusal, processAcceptance }; 
+  return { handleButtonInteraction, handleRefusal, processAcceptance };
 }
 
-module.exports = { createContractAcceptanceHandler, buildLockedRow };
+module.exports = { createContractAcceptanceHandler, buildLockedRow, isContractAcceptanceButton };

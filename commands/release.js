@@ -36,10 +36,7 @@ module.exports = {
     }
 
     try {
-      const [activeContract, isLeagueOpen] = await Promise.all([
-        database.getContractedTeam(userId),
-        database.getLeagueState(),
-      ]);
+      const activeContract = await database.getContractedTeam(userId);
       if (!activeContract) {
         return interaction.editReply({
           content: `❌ **${displayName}** is already a **Free Agent**.`,
@@ -54,14 +51,6 @@ module.exports = {
       if (!canManageTeam(interaction.member, teamInfo)) {
         return interaction.editReply({
           content: `❌ You do not have permission to release players from ${formattedTeamName}.`,
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-
-      const releasesUsed = teamInfo.releasesUsed || 0;
-      if (releasesUsed >= constants.MAX_RELEASES_PER_TEAM && !isChairman(interaction.member)) {
-        return interaction.editReply({
-          content: `❌ ${formattedTeamName} has reached the maximum number of releases allowed this season.`,
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -84,9 +73,6 @@ module.exports = {
         await database.appointStaff(playerTeam, null, staffRole);
       }
       await database.releasePlayer(userId);
-      if (isLeagueOpen) {
-        await database.incrementTeamRelease(playerTeam);
-      }
 
       await interaction.editReply({
         content: isStaff
@@ -109,10 +95,9 @@ module.exports = {
             );
           }
 
-          const [updatedTeamInfo, teamCapacity, releasesCapacity, role] = await Promise.all([
+          const [updatedTeamInfo, teamCapacity, role] = await Promise.all([
             database.getTeamInfo(playerTeam),
             builderHelpers.getDisplayedPlayersAmount(playerTeam),
-            isLeagueOpen ? builderHelpers.getDisplayedReleasesAmount(playerTeam) : null,
             builderHelpers.getTeamRole(interaction.client, playerTeam),
           ]);
 
@@ -134,7 +119,6 @@ module.exports = {
                   name:  'Team Capacity',
                   value: `**${teamCapacity}**`,
                 },
-                ...(isLeagueOpen ? [{ name: 'Releases Used', value: `**${releasesCapacity}**` }] : []),
               ]);
 
             const mentions = [

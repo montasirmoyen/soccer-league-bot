@@ -83,14 +83,90 @@ module.exports = {
       { new: true }
     ),
 
-  incrementTeamRelease: (teamName) =>
-    Team.findOneAndUpdate(
-      { name: teamName.toUpperCase() },
-      { $inc: { releasesUsed: 1 } },
-      { new: true }
-    ),
-
   getAllTeams: () => Team.find({}).sort({ name: 1 }).exec(),
+
+  // ── Player History ─────────────────────────────────────────────────────────
+
+  getPlayerDemandsCount: async (userId) => {
+    const history = await PlayerHistory.findOne({ userId }).exec();
+    return history ? history.demandsUsed : 0;
+  },
+
+  createPendingDemand: (userId, teamName, reason) =>
+    PlayerHistory.findOneAndUpdate(
+      {
+        userId,
+        $or: [
+          { pendingDemand: { $exists: false } },
+          { pendingDemand: null }
+        ]
+      },
+      {
+        $set: {
+          pendingDemand: {
+            teamName: teamName.toUpperCase(),
+            reason,
+            status: 'pending',
+            requestedAt: new Date()
+          }
+        },
+        $setOnInsert: { userId }
+      },
+      { new: true, upsert: true }
+    ).exec(),
+
+  claimPendingDemand: (userId, teamName) =>
+    PlayerHistory.findOneAndUpdate(
+      {
+        userId,
+        'pendingDemand.teamName': teamName.toUpperCase(),
+        'pendingDemand.status': 'pending'
+      },
+      { $set: { 'pendingDemand.status': 'processing' } },
+      { new: true }
+    ).exec(),
+
+  clearPendingDemand: (userId, teamName) =>
+    PlayerHistory.findOneAndUpdate(
+      {
+        userId,
+        ...(teamName ? { 'pendingDemand.teamName': teamName.toUpperCase() } : {})
+      },
+      { $unset: { pendingDemand: 1 } },
+      { new: true }
+    ).exec(),
+
+  restorePendingDemand: (userId, teamName) =>
+    PlayerHistory.findOneAndUpdate(
+      {
+        userId,
+        'pendingDemand.teamName': teamName.toUpperCase(),
+        'pendingDemand.status': 'processing'
+      },
+      { $set: { 'pendingDemand.status': 'pending' } },
+      { new: true }
+    ).exec(),
+
+  acceptPendingDemand: (userId, teamName) =>
+    PlayerHistory.findOneAndUpdate(
+      {
+        userId,
+        'pendingDemand.teamName': teamName.toUpperCase(),
+        'pendingDemand.status': 'processing'
+      },
+      {
+        $inc: { demandsUsed: 1 },
+        $unset: { pendingDemand: 1 }
+      },
+      { new: true }
+    ).exec(),
+
+  incrementPlayerDemand: (userId) =>
+    PlayerHistory.findOneAndUpdate(
+      { userId },
+      { $inc: { demandsUsed: 1 } },
+      { new: true, upsert: true }
+    ),
 
   // ── League Configuration ────────────────────────────────────────────────────────
 

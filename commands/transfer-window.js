@@ -23,7 +23,7 @@ async function updateTransferWindowEmbed(client, isOpen) {
     .setTitle(WINDOW_EMBED_TITLE)
     .setDescription(
       isOpen
-        ? 'The transfer window is now **OPEN**! Teams can register contracts and release players.'
+        ? 'The transfer window is now **OPEN**! Teams can register contracts.'
         : 'The transfer window is now **CLOSED**! Allowed teams can register regular contracts; other teams may use emergency contracts.'
     )
     .addFields({

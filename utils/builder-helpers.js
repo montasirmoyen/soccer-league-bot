@@ -135,12 +135,6 @@ async function getTeamRole(client, teamKey) {
     }
 }
 
-async function getDisplayedReleasesAmount(teamKey) {
-    const teamInfo = await database.getTeamInfo(teamKey);
-    const releasesUsed = teamInfo.releasesUsed || 0;
-    return `${releasesUsed}/${constants.MAX_RELEASES_PER_TEAM}`;
-}
-
 async function getTeamPlayersAmount(teamKey) {
     const squad = await database.getPlayersByTeam(teamKey);
     return Array.isArray(squad) ? squad.length : 0;
@@ -168,7 +162,6 @@ module.exports = {
     formatCooldownDuration,
     getFriendlyChoices,
     getTeamRole,
-    getDisplayedReleasesAmount,
     getDisplayedPlayerSigningsAmount,
     getTeamPlayersAmount,
     getDisplayedPlayersAmount

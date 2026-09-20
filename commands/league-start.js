@@ -53,8 +53,8 @@ module.exports = {
           .setTitle(LEAGUE_EMBED_TITLE)
           .setDescription(
             targetLeagueStatus
-              ? 'The league is now **STARTED**! Releases and player signings are counting.'
-              : 'The league is now **CLOSED**! Team releases and player signings are not counting.'
+              ? 'The league is now **STARTED**! Individual signings are counting.'
+              : 'The league is now **CLOSED**! Individual signings are not counting.'
           );
 
         const messagePayload = { content: targetLeagueStatus ? '🟢' : '🔴', embeds: [embed] };

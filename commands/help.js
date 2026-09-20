@@ -67,6 +67,11 @@ module.exports = {
           inline: false,
         },
         {
+          name: '🚪 `/demand [reason]`',
+          value: '**Purpose:** ´Voluntarily leave a team\n**Effect:** The demand request will be forwarded to the inquiries team to be reviewed.\n**Result:** Posted to https://discord.com/channels/1480550964762251445/1548423772778799207 with team capacity and demands used',
+          inline: false,
+        },
+        {
           name: '🎯 `/scrim [name] [region] [code] [sinfo]`',
           value: '**Purpose:** Host scrims and invite community to play\n**Result:** Posted to https://discord.com/channels/1480550964762251445/1480569639233786027\n**Cooldown:** 1 hour',
           inline: false,
@@ -90,7 +95,6 @@ module.exports = {
           name: '🕐 Key Constraints',
           value: '• **Roster Size:** ' + constants.MAX_ROSTER_SIZE + ' players max per team\n' +
             '• **Emergency Signings:** ' + constants.MAX_EMERGENCY_SIGNS_PER_TEAM + ' per season (window closed only)\n' +
-            '• **Releases:** ' + constants.MAX_RELEASES_PER_TEAM + ' per season\n' +
             '• **Transfer Window:** Must be OPEN to use `/contract`\n',
           inline: false,
         },

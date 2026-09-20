@@ -10,7 +10,7 @@ const { syncMemberRoles, buildVerificationRoleChangePlan } = require('../utils/d
 const REQUIRED_ENV_VARS = ['DISCORD_TOKEN', 'ROBLOX_API_KEY'];
 for (const key of REQUIRED_ENV_VARS) {
   if (!process.env[key]) {
-    throw new Error(`[verifier-handler.js] Missing required env var: ${key}`);
+    throw new Error(`[group-ranking.js] Missing required env var: ${key}`);
   }
 }
 
@@ -217,7 +217,7 @@ async function updateGroupRoleset(membershipPath, targetRoleId, action) {
 
 async function processSingleSync(client, newMember, desiredRoles) {
   if (!newMember?.guild || !newMember.user) {
-    console.warn('[verifier-handler.js] Refusing malformed sync queue item.');
+    console.warn('[group-ranking.js] Refusing malformed sync queue item.');
     return;
   }
 
@@ -226,7 +226,7 @@ async function processSingleSync(client, newMember, desiredRoles) {
     const robloxData = await withRetry(() => getRobloxUserProfile(memberGuildDisplayName));
 
     if (!robloxData?.id) {
-      console.warn(`[verifier-handler.js] No linked Roblox account found for Discord user ${newMember.user.tag}`);
+      console.warn(`[group-ranking.js] No linked Roblox account found for Discord user ${newMember.user.tag}`);
       await sendSyncSkippedLog(client, newMember, 'Could not find a linked Roblox account.');
       return;
     }
@@ -236,7 +236,7 @@ async function processSingleSync(client, newMember, desiredRoles) {
 
     const membership = await withRetry(() => getGroupMembership(robloxId));
     if (!membership) {
-      console.warn(`[verifier-handler.js] User ${robloxId} is not in group ${APP_CONFIG.groupId}`);
+      console.warn(`[group-ranking.js] User ${robloxId} is not in group ${APP_CONFIG.groupId}`);
       await sendSyncSkippedLog(client, newMember, 'The Roblox user is not in the configured group.', robloxData);
       return;
     }
@@ -263,7 +263,7 @@ async function processSingleSync(client, newMember, desiredRoles) {
       const roleData = KNOWN_ROBLOX_ROLES.get(roleId);
       actionLog.push(`🧹 **Removed:** \`${roleData.name}\``);
       changesMade = true;
-      console.log(`[verifier-handler.js] 🧹 Clearing deprecated/conflicting role '${roleData.name}' in Roblox...`);
+      console.log(`[group-ranking.js] 🧹 Clearing deprecated/conflicting role '${roleData.name}' in Roblox...`);
     }
 
     for (const roleId of rolesToAdd) {
@@ -271,15 +271,15 @@ async function processSingleSync(client, newMember, desiredRoles) {
       const roleData = KNOWN_ROBLOX_ROLES.get(roleId);
       actionLog.push(`✅ **Added:** \`${roleData.name}\``);
       changesMade = true;
-      console.log(`[verifier-handler.js] ✅ Assigning target role '${roleData.name}' in Roblox...`);
+      console.log(`[group-ranking.js] ✅ Assigning target role '${roleData.name}' in Roblox...`);
     }
 
     if (!changesMade) {
-      console.log('[verifier-handler.js] 🛑 Member already is with the correct synced roles. Nothing was done.');
+      console.log('[group-ranking.js] 🛑 Member already is with the correct synced roles. Nothing was done.');
       return;
     }
 
-    console.log(`[verifier-handler.js] ✅ Successfully synced Roblox roles (v2) for ${newMember.user.tag}`);
+    console.log(`[group-ranking.js] ✅ Successfully synced Roblox roles (v2) for ${newMember.user.tag}`);
 
     const successEmbed = buildPSLEmbed(client, constants.SUCCESS_COLOR)
       .setTitle('✅ Roblox Roles Synced')
@@ -327,7 +327,7 @@ async function processQueue(client) {
 
 function registerGroupRankingHandler(client) {
   client.once(Events.ClientReady, () => {
-    console.log('[verifier-handler.js] 🌐 Roblox Open Cloud API Engine (v2) initialized.');
+    console.log('[group-ranking.js] 🌐 Roblox Open Cloud API Engine (v2) initialized.');
   });
 
   client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
@@ -349,7 +349,7 @@ function registerGroupRankingHandler(client) {
       const currentHasUnv = currentRoleIds.includes(APP_CONFIG.discord.unverifiedRole);
 
       if (currentHasReg && currentHasUnv) {
-        console.warn(`[verifier-handler.js] Refusing ambiguous verification roles for ${newMember.user.tag}`);
+        console.warn(`[group-ranking.js] Refusing ambiguous verification roles for ${newMember.user.tag}`);
         return;
       }
 
@@ -380,7 +380,7 @@ function registerGroupRankingHandler(client) {
 
       if (!robloxStateChanged) return;
 
-      console.log(`[verifier-handler.js] 📝 Queuing Open Cloud API v2 sync for ${newMember.user.tag}`);
+      console.log(`[group-ranking.js] 📝 Queuing Open Cloud API v2 sync for ${newMember.user.tag}`);
       enqueueSync(newMember, currentDesiredRoles);
 
       processQueue(client).catch((error) =>

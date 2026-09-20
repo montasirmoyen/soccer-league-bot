@@ -16,7 +16,14 @@ const constants                    = require('./config/constants');
 const { safeReply, safeDeferReply } = require('./utils/discord-helpers');
 const { logError, replyWithError } = require('./utils/error-handler');
 const { registerGroupRankingHandler } = require('./handlers/group-ranking');
-const { createContractAcceptanceHandler } = require('./handlers/contract-acceptance');
+const {
+  createContractAcceptanceHandler,
+  isContractAcceptanceButton,
+} = require('./handlers/contract-acceptance');
+const {
+  createDemandAcceptanceHandler,
+  isDemandButton,
+} = require('./handlers/demand-acceptance');
 const guildMemberRemoveEvent       = require('./handlers/guild-member-remove');
 const { updateTeamsRoster }        = require('./utils/roster-updater');
 
@@ -40,18 +47,14 @@ const TIMERS = {
   BUTTON_COOLDOWN_MS:           1000,
   COMMAND_EXECUTION_TIMEOUT_MS: 30000,
   ACCEPT_FLOW_TIMEOUT_MS:       25000,
-  DB_CHECK_TIMEOUT_MS:          8000,
   GUILD_FETCH_TIMEOUT_MS:       8000,
-  MEMBER_FETCH_TIMEOUT_MS:      5000,
-  DB_SAVE_TIMEOUT_MS:           5000,
-  ROLE_ASSIGNMENT_TIMEOUT_MS:   5000,
   NOTIFICATION_TIMEOUT_MS:      5000,
   PLAYER_OPERATION_LOCK_MS:     30000,
   CLEANUP_INTERVAL_MS:          10 * 60 * 1000,
 };
 
 const MANAGING_COMMANDS = [
-  'contract', 'emergency-contract', 'release', 'scout', 'scrim', 'appoint', 'disband', 'appoint'
+  'contract', 'emergency-contract', 'release', 'scout', 'scrim', 'appoint', 'disband', 'match=inform'
 ];
 
 const userCooldowns    = new Map();
@@ -172,6 +175,17 @@ async function bootstrap() {
     clearPlayerOperation,
   });
 
+  const demandAcceptance = createDemandAcceptanceHandler({
+    database,
+    builderHelpers: require('./utils/builder-helpers'),
+    updateTeamsRoster,
+    withTimeout,
+    timers: TIMERS,
+    checkPlayerOperationConflict,
+    recordPlayerOperation,
+    clearPlayerOperation,
+  });
+
   client.on(guildMemberRemoveEvent.name, (...args) => guildMemberRemoveEvent.execute(...args));
 
   setInterval(cleanupExpiredEntries, TIMERS.CLEANUP_INTERVAL_MS).unref();
@@ -187,7 +201,11 @@ async function bootstrap() {
 
   client.on('interactionCreate', async (interaction) => {
     if (interaction.isButton()) {
-      await contractAcceptance.handleButtonInteraction(interaction, client);
+      if (isContractAcceptanceButton(interaction.customId)) {
+        await contractAcceptance.handleButtonInteraction(interaction, client);
+      } else if (isDemandButton(interaction.customId)) {
+        await demandAcceptance.handleButtonInteraction(interaction, client);
+      }
       return;
     }
 

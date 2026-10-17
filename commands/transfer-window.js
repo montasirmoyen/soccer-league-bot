@@ -2,7 +2,7 @@ const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
-const { isChairman, validateGuild } = require('../utils/validations');
+const { requireLeagueAdmin, requireOfficialGuild } = require('../utils/validations');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 const WINDOW_EMBED_TITLE = '⚽ Transfer Window Status';
@@ -27,7 +27,7 @@ async function updateTransferWindowEmbed(client, isOpen) {
         : 'The transfer window is now **CLOSED**! Allowed teams can register regular contracts; other teams may use emergency contracts.'
     )
     .addFields({
-      name: isOpen ? 'Signings denied' : 'Signings allowed',
+      name: isOpen ? 'Contracts denied' : 'Contracts allowed',
       value: getTeamListDisplay(relevantTeams),
     });
 
@@ -60,15 +60,15 @@ function getTeamOption(option) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('transfer-window')
-    .setDescription('Manage the league transfer window and signing permissions.')
+    .setDescription('Manage the league transfer window and contract permissions')
     .addSubcommand((subcommand) =>
       subcommand
         .setName('status')
-        .setDescription('Open or close the transfer window.')
+        .setDescription('Open or close the transfer window')
         .addStringOption((option) =>
           option
             .setName('state')
-            .setDescription('Set the transfer window state.')
+            .setDescription('Set the transfer window state')
             .setRequired(true)
             .addChoices(
               { name: 'Open', value: 'open' },
@@ -91,33 +91,25 @@ module.exports = {
     .addSubcommand((subcommand) =>
       subcommand
         .setName('deny')
-        .setDescription('Prohibit a team from using regular contracts.')
+        .setDescription('Prohibit a team from using regular contracts')
         .addStringOption(getTeamOption),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName('undeny')
-        .setDescription('Remove a team from the regular-contract denied list.')
+        .setDescription('Remove a team from the regular-contract denied list')
         .addStringOption(getTeamOption),
     )
     .addSubcommand((subcommand) =>
-      subcommand.setName('list').setDescription('Show the current signing permission lists.'),
+      subcommand
+        .setName('list')
+        .setDescription('Show the current contract permission lists'),
     ),
 
   async execute(interaction) {
-    if (!validateGuild(interaction)) {
-      return interaction.editReply({
-        content: '❌ You can only execute this command in the official server.',
-        flags: MessageFlags.Ephemeral,
-      });
-    }
+    if (!await requireOfficialGuild(interaction)) return;
 
-    if (!isChairman(interaction.member)) {
-      return interaction.editReply({
-        content: '❌ Only Chairmen and Overseers are allowed to manage the transfer window.',
-        flags: MessageFlags.Ephemeral,
-      });
-    }
+    if (!await requireLeagueAdmin(interaction)) return;
 
     const action = interaction.options.getSubcommand();
     const selectedTeam = interaction.options.getString('team');
@@ -148,11 +140,25 @@ module.exports = {
 
       const config = await database.getTransferWindowConfig();
       if (action === 'list') {
+        const allowedListEmbed = buildPSLEmbed(interaction.client, constants.SUCCESS_COLOR)
+        allowedListEmbed.setTitle('✅ Contracts allowed while closed')
+
+        allowedListEmbed.addFields([{
+          name: 'Allowed Teams',
+          value: getTeamListDisplay(config.transferWindowAllowedTeams) || 'None'
+        }]);
+
+        const deniedListEmbed = buildPSLEmbed(interaction.client, constants.ERROR_COLOR)
+        deniedListEmbed.setTitle('🚫 Contracts denied')
+
+        deniedListEmbed.addFields([{
+          name: 'Denied Teams',
+          value: getTeamListDisplay(config.transferWindowDeniedTeams) || 'None'
+        }]);
+
         return interaction.editReply({
-          content:
-            `✅ **Signings allowed while closed:**\n${getTeamListDisplay(config.transferWindowAllowedTeams)}\n\n` +
-            `🚫 **Signings denied:**\n${getTeamListDisplay(config.transferWindowDeniedTeams)}`,
-          flags: MessageFlags.Ephemeral,
+          embeds: [allowedListEmbed, deniedListEmbed],
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -190,4 +196,5 @@ module.exports = {
       });
     }
   },
+  updateTransferWindowEmbed
 };

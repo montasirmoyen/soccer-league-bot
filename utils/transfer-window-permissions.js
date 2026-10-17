@@ -1,6 +1,6 @@
 const database = require('../db/database');
 
-async function getTransferWindowSigningState(teamName) {
+async function getTransferWindowContractState(teamName) {
   const config = await database.getTransferWindowConfig();
   const isDenied = config.transferWindowDeniedTeams.includes(teamName);
 
@@ -11,4 +11,4 @@ async function getTransferWindowSigningState(teamName) {
   };
 }
 
-module.exports = { getTransferWindowSigningState };
+module.exports = { getTransferWindowContractState };

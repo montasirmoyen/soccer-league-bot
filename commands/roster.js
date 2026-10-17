@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const database = require('../db/database');
 const builderHelpers = require('../utils/builder-helpers');
-const { validateGuild } = require('../utils/validations')
+const { requireOfficialGuild } = require('../utils/validations')
 const { buildPSLEmbed, formatGuildMemberDisplay } = require('../utils/embed-helpers');
 const { safeFetchMember } = require('../utils/discord-helpers')
 const constants = require('../config/constants');
@@ -9,16 +9,17 @@ const constants = require('../config/constants');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('roster')
-    .setDescription('Displays the official roster for a team.')
+    .setDescription('Display the official roster of a team')
     .addStringOption((option) =>
-      option.setName('team').setDescription('Select the team').setRequired(true)
+      option
+        .setName('team')
+        .setDescription('Select the team')
+        .setRequired(true)
         .addChoices(builderHelpers.getTeamChoices())
     ),
 
   async execute(interaction) {
-    if (!validateGuild(interaction)) {
-      return interaction.editReply({ content: '❌ You can only execute this command in the official server.', flags: MessageFlags.Ephemeral });
-    }
+    if (!await requireOfficialGuild(interaction)) return;
 
     const selectedTeam = interaction.options.getString('team');
     try {
@@ -61,7 +62,7 @@ module.exports = {
       const rosterFields = [
         { name: '💼 Management', value: `**M.:** ${managerText}\n**A.M.:** ${assistantText}`, inline: false },
         { name: '⚽ Registered Players', value: `\`[${playerCapacity}]\`\n${playerLines.join('\n')}`, inline: false },
-        { name: '🚨 Emergency Signs', value: `**${teamInfo?.emergencySignsUsed ?? 0}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}** used`, inline: false },
+        { name: '🚨 Emergency Contracts', value: `**${teamInfo?.emergencyContractsUsed ?? 0}/${constants.MAX_EMERGENCY_CONTRACTS_PER_TEAM}** used`, inline: false },
       ];
 
       const rosterEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)

@@ -4,13 +4,13 @@ const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { safeRoleAdd, safeRoleRemove, safeFetchMember } = require('../utils/discord-helpers');
-const { canManageTeam, isChairman, isTeamManager, validateGuild, isRegistered } = require('../utils/validations');
+const { canManageTeam, isLeagueAdmin, isTeamManager, requireOfficialGuild, isRegistered } = require('../utils/validations');
 const { updateTeamsRoster } = require('../utils/roster-updater');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('appoint')
-    .setDescription('Appoints or removes a Manager / Assistant Manager for a team')
+    .setDescription('Appoint or remove a manager / assistant manager for a team')
     .addStringOption((option) =>
       option
         .setName('team')
@@ -36,12 +36,7 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    if (!validateGuild(interaction)) {
-      return interaction.editReply({
-        content: '❌ You can only execute this command in the official server.',
-        flags: MessageFlags.Ephemeral,
-      });
-    }
+    if (!await requireOfficialGuild(interaction)) return;
 
     const selectedTeam = interaction.options.getString('team');
     const selectedRole = interaction.options.getString('role');
@@ -65,7 +60,7 @@ module.exports = {
     const isAssistantAppointment = selectedRole === 'assistant';
     const isManager = interaction.user.id === teamInfo.manager;
 
-    if (!isChairman(interaction.member) && isManager && !isAssistantAppointment) {
+    if (!isLeagueAdmin(interaction.member) && isManager && !isAssistantAppointment) {
       return interaction.editReply({
         content: '❌ Managers can only appoint Assistant Managers.',
         flags: MessageFlags.Ephemeral
@@ -159,7 +154,6 @@ module.exports = {
         });
       }
 
-      const currentStaffId = isRoleManager ? teamInfo.manager : teamInfo.assistantManager;
       if (currentStaffId) {
         return interaction.editReply({
           content: `❌ <@${currentStaffId}> is already in the management of this team. Clear their current role first.`,

@@ -20,26 +20,26 @@ module.exports = {
     .addStringOption((option) =>
       option
         .setName('name')
-        .setDescription('What is the name of the server?')
+        .setDescription('Server name')
         .setRequired(true)
     )
     .addStringOption((option) =>
       option
         .setName('region')
-        .setDescription('What is the region of the server?')
+        .setDescription('Region of the server')
         .setRequired(true)
         .addChoices(builderHelpers.getTimezoneChoices())
     )
     .addStringOption((option) =>
       option
         .setName('code')
-        .setDescription('Is there a code to enter the server?')
+        .setDescription('Code to join the server')
         .setRequired(false)
     )
     .addAttachmentOption((option) =>
       option
         .setName('sinfo')
-        .setDescription('Screenshot of server info gui.')
+        .setDescription('Screenshot of server info GUI')
         .setRequired(false)
     ),
 
@@ -56,7 +56,7 @@ module.exports = {
       if (!member.roles.cache.has(SCRIM_HOSTER_ROLE_ID) && !member.roles.cache.has(STAFF_ROLE_ID)) {
         return interaction.editReply({
           content: '❌ You do not have permission to use this command.',
-          flags: MessageFlags.Ephemeral,
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -65,7 +65,7 @@ module.exports = {
       if (cooldownState.isCoolingDown) {
         return interaction.editReply({
           content: `⏳ Please wait ${builderHelpers.formatCooldownDuration(cooldownState.timeLeftMs)} before using this command again.`,
-          flags: MessageFlags.Ephemeral,
+          flags: MessageFlags.Ephemeral
         });
       }
 

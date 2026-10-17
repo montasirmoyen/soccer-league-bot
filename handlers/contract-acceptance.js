@@ -3,7 +3,7 @@ const constants = require('../config/constants');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { safeFetchMember, safeRoleAdd } = require('../utils/discord-helpers');
 const { logError } = require('../utils/error-handler');
-const { getTransferWindowSigningState } = require('../utils/transfer-window-permissions');
+const { getTransferWindowContractState } = require('../utils/transfer-window-permissions');
 
 const CONTRACT_BUTTON_ACTIONS = new Set([
   'accept',
@@ -80,12 +80,12 @@ function createContractAcceptanceHandler(dependencies) {
     return results.filter(Boolean).join(' ');
   }
 
-  async function postSigningToChannel(client, guild, signingEmbed, teamManager, teamAssistant) {
-    const signingsChannel = await client.channels.fetch(constants.SIGNINGS_CHANNEL_ID).catch(() => null);
-    if (!signingsChannel?.isTextBased?.()) return;
+  async function postContractToChannel(client, guild, contractEmbed, teamManager, teamAssistant) {
+    const contractsChannel = await client.channels.fetch(constants.CONTRACTS_CHANNEL_ID).catch(() => null);
+    if (!contractsChannel?.isTextBased?.()) return;
 
     const mentions = await buildStaffMentions(guild, teamManager, teamAssistant);
-    await signingsChannel.send({ content: mentions, embeds: [signingEmbed] });
+    await contractsChannel.send({ content: mentions, embeds: [contractEmbed] });
   }
 
   async function notifyOfferingStaff(client, issuerId, playerId, teamName, accepted, isEmergency) {
@@ -93,7 +93,7 @@ function createContractAcceptanceHandler(dependencies) {
 
     try {
       const issuer = await client.users.fetch(issuerId);
-      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName).toUpperCase()}**`;
+      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName)}**`;
       const offerType = isEmergency ? 'emergency contract' : 'contract';
       const responseEmbed = buildPSLEmbed(
         client,
@@ -117,13 +117,14 @@ function createContractAcceptanceHandler(dependencies) {
   }
 
   async function handleRefusal(interaction, client, teamName, userId, issuerId, isEmergency) {
-    const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName).toUpperCase()}**`;
+    const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName)}**`;
     const offerType = isEmergency ? 'emergency contract' : 'contract';
+    const issuerDisplayName = interaction.user.displayName || interaction.user.username;
 
     const refuseEmbed = buildPSLEmbed(client, constants.ERROR_COLOR)
       .setTitle('❌ Offer Declined')
       .setDescription(
-        `You have declined the ${offerType} offer from ${formattedTeamName}.\n\nThis decision is final.`
+        `You have declined the ${offerType} offer from ${formattedTeamName} made by **${issuerDisplayName}**.\n\nThis decision is final.`
       );
 
     await interaction.editReply({ embeds: [refuseEmbed], components: [] }).catch(console.warn);
@@ -157,43 +158,43 @@ function createContractAcceptanceHandler(dependencies) {
         'Guild fetch timeout'
       );
 
-      if (isEmergency && teamInfo && teamInfo.emergencySignsUsed >= constants.MAX_EMERGENCY_SIGNS_PER_TEAM) {
-        return failWithEmbed('❌ Signing Failed', `${formattedTeamName} has used all available emergency signing spots.`);
+      if (isEmergency && teamInfo && teamInfo.emergencyContractsUsed >= constants.MAX_EMERGENCY_CONTRACTS_PER_TEAM) {
+        return failWithEmbed('❌ Contract Failed', `${formattedTeamName} has used all available emergency contract spots.`);
       }
 
-      const [signingState, isLeagueOpen, activeContract, squadSize] = await Promise.all([
-        getTransferWindowSigningState(teamName),
+      const [contractState, isLeagueOpen, activeContract, squadSize] = await Promise.all([
+        getTransferWindowContractState(teamName),
         database.getLeagueState(),
         database.getContractedTeam(userId),
         database.getPlayersByTeam(teamName),
       ]);
 
-      if (signingState.isDenied && !isEmergency) {
-        return failWithEmbed('❌ Signing Failed', `${formattedTeamName} is currently **denied from regular signings**.`);
+      if (contractState.isDenied && !isEmergency) {
+        return failWithEmbed('❌ Contract Failed', `${formattedTeamName} is currently **denied from regular contracts**.`);
       }
 
-      if (isEmergency && (signingState.isWindowOpen || signingState.isAllowedWhileClosed)) {
+      if (isEmergency && (contractState.isWindowOpen || contractState.isAllowedWhileClosed)) {
         return failWithEmbed(
-          '❌ Signing Failed',
-          signingState.isWindowOpen
+          '❌ Contract Failed',
+          contractState.isWindowOpen
             ? 'The transfer window **opened** while you were reviewing this offer. Use a regular contract instead.'
-            : `${formattedTeamName} is allowed to sign freely while the transfer window is closed. Use a regular contract instead.`
+            : `${formattedTeamName} is allowed to offer contracts freely while the transfer window is closed. Use a regular contract instead.`
         );
       }
 
-      if (!isEmergency && !signingState.isWindowOpen && !signingState.isAllowedWhileClosed) {
-        return failWithEmbed('❌ Signing Failed', 'The transfer window is **closed** and this team is not on the allowed list.');
+      if (!isEmergency && !contractState.isWindowOpen && !contractState.isAllowedWhileClosed) {
+        return failWithEmbed('❌ Contract Failed', 'The transfer window is **closed** and this team is not on the allowed list.');
       }
 
       if (activeContract) {
         return failWithEmbed(
-          '❌ Signing Failed',
-          `You are already registered with **${builderHelpers.getFormattedTeamName(activeContract.teamName).toUpperCase()}**.`
+          '❌ Contract Failed',
+          `You are already registered with **${builderHelpers.getFormattedTeamName(activeContract.teamName)}**.`
         );
       }
 
       if (squadSize.length >= constants.MAX_ROSTER_SIZE) {
-        return failWithEmbed('❌ Signing Failed', `${formattedTeamName}'s roster has since reached its limit.`);
+        return failWithEmbed('❌ Contract Failed', `${formattedTeamName}'s roster has since reached its limit.`);
       }
 
       const targetMember = await guild.members.fetch(userId);
@@ -201,7 +202,7 @@ function createContractAcceptanceHandler(dependencies) {
 
       let updatedTeamInfo = teamInfo;
       if (isEmergency) {
-        updatedTeamInfo = await database.incrementEmergencySign(teamName);
+        updatedTeamInfo = await database.incrementEmergencyContract(teamName);
       }
 
       await safeRoleAdd(targetMember, teamInfo.roleId);
@@ -210,7 +211,7 @@ function createContractAcceptanceHandler(dependencies) {
         .setTitle(isEmergency ? '🚨 Emergency Contract Accepted!' : '✅ Contract Accepted!')
         .setDescription(
           isEmergency
-            ? `You have officially joined ${formattedTeamName} via Emergency Signing! Good luck! 🏆`
+            ? `You have officially joined ${formattedTeamName} via an emergency contract! Good luck! 🏆`
             : `Welcome to ${formattedTeamName}! You are now an officially registered squad member. Good luck this season! 🏆`
         );
 
@@ -221,44 +222,45 @@ function createContractAcceptanceHandler(dependencies) {
           try {
             const { manager, assistant } = await fetchTeamStaff(teamName);
             const capacityText = await builderHelpers.getDisplayedPlayersAmount(teamName);
-            const signingsText = isLeagueOpen
-              ? await builderHelpers.getDisplayedPlayerSigningsAmount(userId)
+            const contractsText = isLeagueOpen
+              ? await builderHelpers.getDisplayedPlayerContractsAmount(userId)
               : null;
 
-            const signingEmbed = buildPSLEmbed(client, embedColor)
+            const contractEmbed = buildPSLEmbed(client, embedColor)
             .setTitle(
               isEmergency
-                ? `🚨 ${formattedTeamName} Emergency Signing`
-                : `${formattedTeamName} Official Signing`
+                ? `🚨 ${formattedTeamName} Emergency Contract`
+                : `${formattedTeamName} Official Contract`
             )
             .setThumbnail(interaction.user.displayAvatarURL());
 
             const displayName = targetMember.displayName;
+            const contractFields = [
+              {
+                name: 'Player Contracted',
+                value: isEmergency
+                  ? `**${displayName}** has accepted an emergency contract with ${formattedTeamName}! 🚨`
+                  : `**${displayName}** has officially joined ${formattedTeamName}! 🎉`,
+              },
+              { name: 'Team Capacity', value: `**${capacityText}**` },
+            ];
+
             if (isEmergency) {
-              const emergencySignsUsed = updatedTeamInfo?.emergencySignsUsed ?? (teamInfo?.emergencySignsUsed + 1);
-              const signingFields = [
-                { name: 'Player Signed', value: `**${displayName}** has accepted an emergency contract with ${formattedTeamName}! 🚨` },
-                { name: 'Team Capacity', value: `**${capacityText}**` },
-                { name: 'Emergency Contracts Used', value: `**${emergencySignsUsed}/${constants.MAX_EMERGENCY_SIGNS_PER_TEAM}**` },
-              ];
-              if (isLeagueOpen) {
-                signingFields.push({ name: 'Individual Signings Used', value: `**${signingsText}**` });
-              }
-              signingEmbed.addFields(signingFields);
-            } else {
-              const signingFields = [
-                { name: 'Player Signed', value: `**${displayName}** has officially joined ${formattedTeamName}! 🎉` },
-                { name: 'Team Capacity', value: `**${capacityText}**` },
-              ];
-              if (isLeagueOpen) {
-                signingFields.push({ name: 'Player Signings Used', value: `**${signingsText}**` });
-              }
-              signingEmbed.addFields(signingFields);
+              const emergencyContractsUsed = updatedTeamInfo?.emergencyContractsUsed ?? (teamInfo?.emergencyContractsUsed + 1);
+              contractFields.push({
+                name: 'Emergency Contracts Used',
+                value: `**${emergencyContractsUsed}/${constants.MAX_EMERGENCY_CONTRACTS_PER_TEAM}**`,
+              });
             }
 
-            await postSigningToChannel(client, guild, signingEmbed, manager, assistant);
+            if (isLeagueOpen) {
+              contractFields.push({ name: 'Individual Contracts Used', value: `**${contractsText}**` });
+            }
+
+            contractEmbed.addFields(contractFields);
+            await postContractToChannel(client, guild, contractEmbed, manager, assistant);
           } catch (err) {
-            await logError(err, client, { userId, teamName, action: 'POST_SIGNING_TO_CHANNEL' });
+            await logError(err, client, { userId, teamName, action: 'POST_CONTRACT_TO_CHANNEL' });
           }
         })(),
         (async () => {
@@ -284,7 +286,7 @@ function createContractAcceptanceHandler(dependencies) {
         context: 'PROCESS_ACCEPTANCE_ERROR',
       });
 
-      await interaction.editReply({ content: '❌ Error processing your signing. Please contact staff.', components: [] }).catch(console.warn);
+      await interaction.editReply({ content: '❌ Error processing your contract. Please contact staff.', components: [] }).catch(console.warn);
     }
   }
 
@@ -301,7 +303,7 @@ function createContractAcceptanceHandler(dependencies) {
     const teamInfo = await database.getTeamInfo(teamName);
     if (!teamInfo) {
       console.log('[contract-acceptance] Team not found in database:', teamName);
-      return interaction.reply({ content: '❌ The team you are trying to sign with does not exist.', flags: MessageFlags.Ephemeral });
+      return interaction.reply({ content: '❌ The team for this contract offer does not exist.', flags: MessageFlags.Ephemeral });
     }
 
     const messageId = interaction.message.id;

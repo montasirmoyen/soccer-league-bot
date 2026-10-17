@@ -1,21 +1,18 @@
 const {
   SlashCommandBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   MessageFlags,
 } = require('discord.js');
 const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
-const { buildPSLEmbed } = require('../utils/embed-helpers');
-const { canManageTeam, validateGuild, isRegistered } = require('../utils/validations');
-const { getTransferWindowSigningState } = require('../utils/transfer-window-permissions');
+const { canManageTeam, requireOfficialGuild, isRegistered } = require('../utils/validations');
+const { getTransferWindowContractState } = require('../utils/transfer-window-permissions');
+const { buildContractOfferPayload, isDMDeliveryError } = require('../utils/contract-offer');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('contract')
-    .setDescription("Sends a contract offer to a player's DM")
+    .setDescription("Send a contract offer to a player's DM")
     .addStringOption((option) =>
       option
         .setName('team')
@@ -31,13 +28,10 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    if (!validateGuild(interaction)) {
-      return interaction.editReply({
-        content: '❌ You can only execute this command in the official server.',
-        flags: MessageFlags.Ephemeral,
-      });
-    }
+    if (!await requireOfficialGuild(interaction)) return;
 
+    const issuer = interaction.user;
+    const issuerDisplayName = issuer.displayName || issuer.username;
     const selectedTeam = interaction.options.getString('team');
     const signee = interaction.options.getMember('signee');
     const userId = signee.id;
@@ -52,21 +46,29 @@ module.exports = {
     const targetMember = await interaction.guild.members.fetch(userId ).catch(() => null);
     if (!targetMember) {
       return interaction.editReply({
-        content: `❌ <@${userId }> is not currently a member of this server.`,
+        content: `❌ <@${userId}> is not currently a member of this server.`,
         flags: MessageFlags.Ephemeral,
       });
     }
 
     if (!(await isRegistered(signee))) {
       return interaction.editReply({
-        content: `❌ <@${userId }> has not registered themselves yet.`,
+        content: `❌ <@${userId}> has not registered themselves yet.`,
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    const restrictedActions = await database.getPlayerRestrictedActions(userId);
+    if (restrictedActions && restrictedActions.includes('CONTRACTS')) {
+      return interaction.editReply({
+        content: `❌ <@${userId}> is currently frozen from contract offers.`,
         flags: MessageFlags.Ephemeral
       });
     }
 
     try {
-      const [signingState, isLeagueStarted, teamInfo, isStaffSomewhere, activeContract, currentSquad] = await Promise.all([
-        getTransferWindowSigningState(selectedTeam),
+      const [contractState, isLeagueStarted, teamInfo, isStaffSomewhere, activeContract, currentSquad] = await Promise.all([
+        getTransferWindowContractState(selectedTeam),
         database.getLeagueState(),
         database.getTeamInfo(selectedTeam),
         database.isUserStaffAnywhere(userId ),
@@ -76,13 +78,13 @@ module.exports = {
 
       const formattedTeamName = `**${builderHelpers.getFormattedTeamName(selectedTeam)}**`;
 
-      if (signingState.isDenied) {
+      if (contractState.isDenied) {
         return interaction.editReply({
-          content: '🚫 This team is currently **denied from regular signings**.',
+          content: '🚫 This team is currently **denied from regular contracts**.',
           flags: MessageFlags.Ephemeral,
         });
       }
-      if (!signingState.isWindowOpen && !signingState.isAllowedWhileClosed) {
+      if (!contractState.isWindowOpen && !contractState.isAllowedWhileClosed) {
         return interaction.editReply({
           content: '🔒 The transfer window is currently **CLOSED**. Use `/emergency-contract` instead.',
           flags: MessageFlags.Ephemeral,
@@ -96,7 +98,7 @@ module.exports = {
       }
       if (isStaffSomewhere) {
         return interaction.editReply({
-          content: `❌ <@${userId }> is management staff for **${isStaffSomewhere.name}** and cannot sign as a player.`,
+          content: `❌ <@${userId }> is management staff for **${isStaffSomewhere.name}** and cannot hold a player contract.`,
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -112,10 +114,10 @@ module.exports = {
           flags: MessageFlags.Ephemeral,
         });
       }
-      const playerSigningsUsed = await database.getPlayerSigningsCount(userId);
-      if (playerSigningsUsed >= constants.MAX_SIGNINGS_PER_PLAYER && isLeagueStarted) {
+      const individualContractsUsed = await database.getIndividualContractsCount(userId);
+      if (individualContractsUsed >= constants.MAX_CONTRACTS_PER_PLAYER && isLeagueStarted) {
         return interaction.editReply({
-          content: `❌ This player has reached the maximum number of signings allowed.`,
+          content: `❌ This player has reached the maximum number of contracts allowed.`,
           flags: MessageFlags.Ephemeral
         });
       }
@@ -123,29 +125,18 @@ module.exports = {
       const role = await builderHelpers.getTeamRole(interaction.client, selectedTeam);
       const embedColor = role?.color || constants.DEFAULT_EMBED_COLOR;
 
-      const contractEmbed = buildPSLEmbed(interaction.client, embedColor)
-        .setTitle('📜 NEW CONTRACT OFFER!')
-        .setDescription(
-          `Hello, <@${userId }>,\n\n` +
-          `${formattedTeamName} has officially extended a contract offer to you for this season.\n\n` +
-          `Please review and make your decision below:`,
-        );
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`accept_${selectedTeam}_${userId }_${interaction.user.id}`)
-          .setLabel('🤝 Accept Contract')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`refuse_${selectedTeam}_${userId }_${interaction.user.id}`)
-          .setLabel('❌ Refuse')
-          .setStyle(ButtonStyle.Danger),
-      );
-
       try {
-        await signee.send({ embeds: [contractEmbed], components: [row] });
+        await signee.send(buildContractOfferPayload({
+          client: interaction.client,
+          teamName: selectedTeam,
+          formattedTeamName,
+          userId,
+          issuerId: interaction.user.id,
+          issuerDisplayName,
+          embedColor,
+        }));
       } catch (dmError) {
-        if (dmError.code === 50007 || dmError.code === 50278 || dmError.status === 403) {
+        if (isDMDeliveryError(dmError)) {
           return interaction.editReply({
             content: `❌ Unable to send a DM to <@${userId }>. They may have **DMs disabled** or **blocked the bot**. \nPlease ask them to enable DMs from server members and try again.\n 1. Right-click the server icon and select "**Privacy Settings**".\n 2. Ensure "**Allow DMs from other members**" is enabled.\n 3. Try running the command again.`,
             flags: MessageFlags.Ephemeral,

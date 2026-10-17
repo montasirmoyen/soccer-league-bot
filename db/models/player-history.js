@@ -9,9 +9,10 @@ const pendingDemandSchema = new mongoose.Schema({
 
 const playerHistorySchema = new mongoose.Schema({
   userId: { type: String, required: true, unique: true },
-  signingsUsed: { type: Number, default: 0 },
+  contractsUsed: { type: Number, default: 0 },
   demandsUsed: { type: Number, default: 0 },
-  pendingDemand: { type: pendingDemandSchema, default: null }
+  pendingDemand: { type: pendingDemandSchema, default: null },
+  restrictedActions: { type: [String], default: null }
 });
 
 module.exports = mongoose.model('PlayerHistory', playerHistorySchema);

@@ -5,23 +5,23 @@ const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 
 const cooldowns = new Map();
-const COOLDOWN_TIME = 0 //30 * 60 * 1000;
+const COOLDOWN_TIME = 30 * 60 * 1000;
 
 module.exports = {
-  data: new SlashCommandBuilder()
+  data: new SlashCommandBuilder() 
     .setName('friendly')
     .setDescription('Announce that you are looking for a friendly match')
     .addStringOption((option) =>
       option
-        .setName('region')
-        .setDescription('Your region')
-        .setRequired(true)
-        .addChoices(builderHelpers.getTimezoneChoices())
+          .setName('region')
+          .setDescription('Your region')
+          .setRequired(true)
+          .addChoices(builderHelpers.getTimezoneChoices())
     )
     .addStringOption((option) =>
       option
         .setName('type')
-        .setDescription('Type of friendly')
+        .setDescription('Friendly type')
         .setRequired(true)
         .addChoices(builderHelpers.getFriendlyChoices())
     )
@@ -65,12 +65,19 @@ module.exports = {
       const isTeamStaff = !!staffRecord;
       const member = await interaction.guild.members.fetch(userId).catch(() => null);
       const displayName = builderHelpers.getDiscordDisplayName(member, user);
+      const teamRole = isTeamStaff ? await builderHelpers.getTeamRole(interaction.client, staffRecord.name) : null;
 
-      const pingString = `<@${userId}> <@&${constants.FRIENDLY_ROLE_ID}>`;
-      const informationMessage = type === 'DM' ? `DM **${displayName}** if you want to friendly!` : 'Team is in a server waiting to friendly!';
-      const statusMessage = type === 'IN-GAME' ? 'In Game' : 'DM to Play';
+      const typeInformation = {
+        'DM': { status: 'DM to Play', description: `DM **${displayName}** if you want to friendly!` },
+        'IN-GAME': { status: 'In Game', description: 'Team is in a server waiting to friendly!' },
+        'PING': { status: 'Ping to Play', description: `Ping **${displayName}** if you want to friendly!` }
+      }
+
+      const mentions = `<@${userId}> <@&${constants.FRIENDLY_ROLE_ID}>`;
+      const statusMessage = typeInformation[type].status || 'Unknown';
+      const informationMessage = typeInformation[type].description || 'No additional information provided.';
       const agentName = isTeamStaff ? builderHelpers.getFormattedTeamName(staffRecord.name) : displayName;
-      const embedColor = isTeamStaff ? (await builderHelpers.getTeamRole(interaction.client, staffRecord.name)).color : constants.DEFAULT_EMBED_COLOR;
+      const embedColor = teamRole ? teamRole.color : constants.DEFAULT_EMBED_COLOR;
 
       const embed = buildPSLEmbed(interaction.client, embedColor)
         .setThumbnail(user.displayAvatarURL());
@@ -86,7 +93,7 @@ module.exports = {
       }
 
       const channel = await interaction.client.channels.fetch(constants.FRIENDLY_CHANNEL_ID);
-      await channel.send({ content: pingString, embeds: [embed] });
+      await channel.send({ content: mentions, embeds: [embed] });
       await interaction.editReply({ content: '✅ Your friendly announcement has been sent! **Best of luck!**', flags: MessageFlags.Ephemeral });
     } catch (error) {
       console.error('❌ Error in /friendly:', error);

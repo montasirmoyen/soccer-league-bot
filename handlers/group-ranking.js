@@ -7,7 +7,7 @@ const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { logError, SystemError } = require('../utils/error-handler');
 const { syncMemberRoles, buildVerificationRoleChangePlan } = require('../utils/discord-helpers');
 
-const REQUIRED_ENV_VARS = ['PRODUCTION_BOT_TOKEN', 'DEVELOPMENT_BOT_TOKEN', 'ROBLOX_API_KEY'];
+const REQUIRED_ENV_VARS = ['PRODUCTION_BOT_TOKEN', 'ROBLOX_API_KEY'];
 for (const key of REQUIRED_ENV_VARS) {
   if (!process.env[key]) {
     throw new Error(`[group-ranking.js] Missing required env var: ${key}`);

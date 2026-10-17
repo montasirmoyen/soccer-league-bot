@@ -32,14 +32,14 @@ module.exports = {
     const position = interaction.options.getString('position');
     const region = interaction.options.getString('region');
 
-    console.log(`\n🏃 [freeagent.js] Free agent registration by ${user.tag}`);
+    console.log(`\n🏃 [free-agent.js] Free agent registration by ${user.tag}`);
 
     try {
       const contract = await database.getContractedTeam(userId);
       if (contract) {
         const formattedTeamName = builderHelpers.getFormattedTeamName(contract.teamName);
         return interaction.editReply({
-          content: `❌ You are already contracted to **${formattedTeamName}**.`,
+          content: `❌ You have an active contract with **${formattedTeamName}**.`,
           flags: MessageFlags.Ephemeral
         });
       }
@@ -51,7 +51,7 @@ module.exports = {
       if (cooldownState.isCoolingDown) {
         return interaction.editReply({
           content: `⏰ You're on cooldown! Try again in ${builderHelpers.formatCooldownDuration(cooldownState.timeLeftMs)}.`,
-          flags: MessageFlags.Ephemeral,
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -72,17 +72,17 @@ module.exports = {
       if (!targetChannel) {
         return interaction.editReply({
           content: '⚠️ Could not find the free agent channel.',
-          flags: MessageFlags.Ephemeral,
+          flags: MessageFlags.Ephemeral
         });
       }
 
       await targetChannel.send({ content: `<@${userId}>`, embeds: [embed] });
       await interaction.editReply({
         content: '✅ You have been registered as a free agent!',
-        flags: MessageFlags.Ephemeral,
+        flags: MessageFlags.Ephemeral
       });
     } catch (error) {
-      console.error('❌ Error in /freeagent:', error);
+      console.error('❌ Error in /free-agent:', error);
       return interaction.editReply({ content: '❌ An error occurred while registering as a free agent.', flags: MessageFlags.Ephemeral });
     }
   },

@@ -1,11 +1,27 @@
-const { Client } = require('discord.js');
 const configLeagues = require('../config/leagues')
 const configTeams = require('../config/teams');
 const configPositions = require('../config/positions')
 const configTimezones = require('../config/timezones')
 const configFriendlies = require('../config/friendlies')
+const configActions = require('../config/actions')
+const configDataTypes = require('../config/dataTypes')
 const constants = require('../config/constants');
 const database = require('../db/database');
+
+function toTitleCase(value) {
+    return value
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
+function getChoices(items, getName) {
+    return Object.entries(items).map(([key, item]) => ({
+        name: getName(key, item),
+        value: key
+    }));
+}
 
 function getEmoji(group, key) {
     const objectKey = key?.toUpperCase().trim();
@@ -14,63 +30,45 @@ function getEmoji(group, key) {
 }
 
 function getFormattedTeamName(teamKey) {
-    const formattedName = teamKey
-        .toLowerCase()
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
+    const formattedName = toTitleCase(teamKey);
     const emojiId = getEmoji(configTeams.teams, teamKey);
 
     return `${emojiId} ${formattedName}`;
 }
 
 function getFormattedLeagueName(leagueKey) {
-    const formattedName = leagueKey
-        .toLowerCase()
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
+    const formattedName = toTitleCase(leagueKey);
     const emojiId = getEmoji(configLeagues.leagues, leagueKey);
 
     return `${emojiId} ${formattedName}`;
 }
 
 function getTeamChoices() {
-    const teamKeys = Object.keys(configTeams.teams);
-    return teamKeys.map(team => {
-        const formattedName = team
-            .toLowerCase()
-            .split(' ')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
-
-        return {
-            name: `⚽ ${formattedName}`,
-            value: team
-        };
-    });
+    return getChoices(configTeams.teams, team => `⚽ ${toTitleCase(team)}`);
 }
 
 function getPositionChoices() {
-    const positionKeys = Object.keys(configPositions.positions);
-    return positionKeys.map(position => {
-        const emoji = configPositions.positions[position].EMOJI;
-        return {
-            name: `${emoji} ${position}`,
-            value: position
-        };
-    });
+    return getChoices(configPositions.positions, (position, data) => `${data.EMOJI} ${position}`);
 }
 
 function getTimezoneChoices() {
-    const timezoneKeys = Object.keys(configTimezones.timezones)
-    return timezoneKeys.map(timezone => {
-        const emoji = configTimezones.timezones[timezone].EMOJI;
-        return {
-            name: `${emoji} ${timezone}`,
-            value: timezone
-        }
-    });
+    return getChoices(configTimezones.timezones, (timezone, data) => `${data.EMOJI} ${timezone}`);
+}
+
+function getFriendlyChoices() {
+    return getChoices(configFriendlies.friendlies, (friendly, data) => `${data.EMOJI} ${friendly}`);
+}
+
+function getActionChoices() {
+    return getChoices(configActions.actions, (action, data) => data.NAME);
+}
+
+function getPlayerDataChoices() {
+    return getChoices(configDataTypes.player, (key, data) => data.NAME);
+}
+
+function getTeamDataChoices() {
+    return getChoices(configDataTypes.team, (key, data) => data.NAME);
 }
 
 function getDiscordDisplayName(member, user) {
@@ -108,17 +106,6 @@ function formatCooldownDuration(timeLeftMs) {
     return parts.join(' ');
 }
 
-function getFriendlyChoices() {
-    const friendlyKeys = Object.keys(configFriendlies.friendlies);
-    return friendlyKeys.map(friendly => {
-        const emoji = configFriendlies.friendlies[friendly].EMOJI;
-        return {
-            name: `${emoji} ${friendly}`,
-            value: friendly
-        };
-    });
-}
-
 async function getTeamRole(client, teamKey) {
     const teamInfo = configTeams.teams[teamKey];
     if (!teamInfo || !teamInfo.ROLE_ID) return null;
@@ -140,14 +127,23 @@ async function getTeamPlayersAmount(teamKey) {
     return Array.isArray(squad) ? squad.length : 0;
 }
 
-async function getDisplayedPlayersAmount(teamKey) {
-    const playersAmount = await getTeamPlayersAmount(teamKey);
-    return `${playersAmount}/${constants.MAX_ROSTER_SIZE}`;
+function formatUsageCount(used, maximum) {
+    return `${used}/${maximum}`;
 }
 
-async function getDisplayedPlayerSigningsAmount(userId) {
-    const signingsUsed = await database.getPlayerSigningsCount(userId);
-    return `${signingsUsed}/${constants.MAX_SIGNINGS_PER_PLAYER}`;
+async function getDisplayedPlayerContractsAmount(userId) {
+    const contractsUsed = await database.getIndividualContractsCount(userId);
+    return formatUsageCount(contractsUsed, constants.MAX_CONTRACTS_PER_PLAYER);
+}
+
+async function getDisplayedPlayerDemandsAmount(userId) {
+    const demandsUsed = await database.getPlayerDemandsCount(userId);
+    return formatUsageCount(demandsUsed, constants.MAX_DEMANDS_PER_PLAYER);
+}
+
+async function getDisplayedPlayersAmount(teamKey) {
+    const playersAmount = await getTeamPlayersAmount(teamKey);
+    return formatUsageCount(playersAmount, constants.MAX_ROSTER_SIZE);
 }
 
 module.exports = {
@@ -157,12 +153,16 @@ module.exports = {
     getTeamChoices,
     getPositionChoices,
     getTimezoneChoices,
+    getFriendlyChoices,
+    getActionChoices,
+    getPlayerDataChoices,
+    getTeamDataChoices,
     getDiscordDisplayName,
     getCooldownState,
     formatCooldownDuration,
-    getFriendlyChoices,
     getTeamRole,
-    getDisplayedPlayerSigningsAmount,
+    getDisplayedPlayerContractsAmount,
     getTeamPlayersAmount,
-    getDisplayedPlayersAmount
+    getDisplayedPlayersAmount,
+    getDisplayedPlayerDemandsAmount
 };

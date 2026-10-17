@@ -8,11 +8,11 @@ const {
   Events,
   MessageFlags
 } = require('discord.js');
-const { loadCommands }             = require('./bot/load-commands');
-const { registerCommands }         = require('./bot/register-commands');
-const { startHealthServer }        = require('./web/health-server');
-const database                     = require('./db/database');
-const constants                    = require('./config/constants');
+const { loadCommands } = require('./bot/load-commands');
+const { registerCommands } = require('./bot/register-commands');
+const { startHealthServer } = require('./web/health-server');
+const database = require('./db/database');
+const { BOT_TOKEN } = require('./config/constants');
 const { safeReply, safeDeferReply } = require('./utils/discord-helpers');
 const { logError, replyWithError } = require('./utils/error-handler');
 const { registerGroupRankingHandler } = require('./handlers/group-ranking');
@@ -24,8 +24,10 @@ const {
   createDemandAcceptanceHandler,
   isDemandButton,
 } = require('./handlers/demand-acceptance');
-const guildMemberRemoveEvent       = require('./handlers/guild-member-remove');
-const { updateTeamsRoster }        = require('./utils/roster-updater');
+const guildMemberRemoveEvent = require('./handlers/guild-member-remove');
+const { updateTeamsRoster } = require('./utils/roster-updater');
+const { updateLeagueStatusEmbed } = require('./commands/league-status');
+const { updateTransferWindowEmbed } = require('./commands/transfer-window');
 
 class UserFacingError extends Error {
   constructor(message) {
@@ -42,27 +44,27 @@ class TimeoutError extends Error {
 }
 
 const TIMERS = {
-  DEFAULT_COMMAND_COOLDOWN_MS:  2000,
+  DEFAULT_COMMAND_COOLDOWN_MS: 2000,
   MANAGING_COMMAND_COOLDOWN_MS: 4000,
-  BUTTON_COOLDOWN_MS:           1000,
+  BUTTON_COOLDOWN_MS: 1000,
   COMMAND_EXECUTION_TIMEOUT_MS: 30000,
-  ACCEPT_FLOW_TIMEOUT_MS:       25000,
-  GUILD_FETCH_TIMEOUT_MS:       8000,
-  NOTIFICATION_TIMEOUT_MS:      5000,
-  PLAYER_OPERATION_LOCK_MS:     30000,
-  CLEANUP_INTERVAL_MS:          10 * 60 * 1000,
+  ACCEPT_FLOW_TIMEOUT_MS: 25000,
+  GUILD_FETCH_TIMEOUT_MS: 8000,
+  NOTIFICATION_TIMEOUT_MS: 5000,
+  PLAYER_OPERATION_LOCK_MS: 30000,
+  CLEANUP_INTERVAL_MS: 10 * 60 * 1000,
 };
 
 const MANAGING_COMMANDS = [
   'contract', 'emergency-contract', 'release', 'scout', 'scrim', 'appoint', 'disband', 'match=inform'
 ];
 
-const userCooldowns    = new Map();
-const buttonCooldowns  = new Map();
+const userCooldowns = new Map();
+const buttonCooldowns = new Map();
 const playerOperations = new Map();
 
 function hasUserCooldown(userId, command) {
-  const key  = `${userId}:${command}`;
+  const key = `${userId}:${command}`;
   const data = userCooldowns.get(key);
   if (!data) return false;
   if (Date.now() < data.coolUntilMs) return true;
@@ -75,7 +77,7 @@ function setUserCooldown(userId, command, cooldownMs = TIMERS.DEFAULT_COMMAND_CO
 }
 
 function hasButtonCooldown(userId, messageId) {
-  const key       = `${userId}:${messageId}`;
+  const key = `${userId}:${messageId}`;
   const timestamp = buttonCooldowns.get(key);
   if (!timestamp) return false;
   if (Date.now() - timestamp < TIMERS.BUTTON_COOLDOWN_MS) return true;
@@ -190,13 +192,18 @@ async function bootstrap() {
 
   setInterval(cleanupExpiredEntries, TIMERS.CLEANUP_INTERVAL_MS).unref();
 
-  client.once(Events.ClientReady, () => {
+  client.once(Events.ClientReady, async () => {
     console.log(`\n🤖 Bot online as: ${client.user.tag} (${client.user.id})`);
     client.user.setPresence({
-      status:     'online',
-      activities: [{ name: '/help', type: ActivityType.Listening }],
+      status: 'online',
+      activities: [{
+        name: '/help',
+        type: ActivityType.Watching
+      }],
     });
     updateTeamsRoster(client);
+    updateLeagueStatusEmbed(client, await database.getLeagueState());
+    updateTransferWindowEmbed(client, await database.getTransferWindowState());
   });
 
   client.on('interactionCreate', async (interaction) => {
@@ -211,15 +218,15 @@ async function bootstrap() {
 
     if (!interaction.isChatInputCommand()) return;
 
-    const userId   = interaction.user.id;
-    const command  = interaction.commandName;
+    const userId = interaction.user.id;
+    const command = interaction.commandName;
     const cooldown = MANAGING_COMMANDS.includes(command)
       ? TIMERS.MANAGING_COMMAND_COOLDOWN_MS
       : TIMERS.DEFAULT_COMMAND_COOLDOWN_MS;
 
     if (hasUserCooldown(userId, command)) {
       return safeReply(interaction, {
-        content:   `⏳ Please wait before using /${command} again.`,
+        content: `⏳ Please wait before using /${command} again.`,
         flags: MessageFlags.Ephemeral
       });
     }
@@ -250,7 +257,7 @@ async function bootstrap() {
       if (error instanceof TimeoutError) {
         console.warn(`⏱️  /${command} timed out for ${interaction.user.tag}`);
         await safeRespond(interaction, {
-          content:   '⏱️ This is taking longer than expected. Please try again in a moment.',
+          content: '⏱️ This is taking longer than expected. Please try again in a moment.',
           flags: MessageFlags.Ephemeral
         });
         return;
@@ -258,13 +265,13 @@ async function bootstrap() {
 
       await logError(error, client, { userId, command, context: 'SLASH_COMMAND_EXECUTION_ERROR' });
       await safeRespond(interaction, {
-        content:   '❌ Something went wrong on our end. Please try again, and open a ticket if it keeps happening.',
+        content: '❌ Something went wrong on our end. Please try again, and open a ticket if it keeps happening.',
         flags: MessageFlags.Ephemeral
       });
     }
   });
 
-  await client.login(process.env.DISCORD_TOKEN);
+  await client.login(BOT_TOKEN);
 }
 
 bootstrap().catch((startupError) => {

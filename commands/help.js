@@ -53,7 +53,7 @@ module.exports = {
         },
         {
           name: '🚨 `/emergency-contract [team_name] [player]`',
-          value: '**Purpose:** Sign player when transfer window is CLOSED\n**Limit:** ' + constants.MAX_EMERGENCY_SIGNS_PER_TEAM + ' per team per season\n**Roster:** Team must have space\n**Cooldown:** 4 seconds between sends\n**Result:** DM sent to player | Posted to https://discord.com/channels/1480550964762251445/1480569415622725662 with emergency badge',
+          value: '**Purpose:** Offer an emergency contract when the transfer window is CLOSED\n**Limit:** ' + constants.MAX_EMERGENCY_CONTRACTS_PER_TEAM + ' per team per season\n**Roster:** Team must have space\n**Cooldown:** 4 seconds between sends\n**Result:** DM sent to player | Posted to https://discord.com/channels/1480550964762251445/1480569415622725662 with emergency badge',
           inline: false,
         },
         {
@@ -68,7 +68,7 @@ module.exports = {
         },
         {
           name: '🚪 `/demand [reason]`',
-          value: '**Purpose:** ´Voluntarily leave a team\n**Effect:** The demand request will be forwarded to the inquiries team to be reviewed.\n**Result:** Posted to https://discord.com/channels/1480550964762251445/1548423772778799207 with team capacity and demands used',
+          value: '**Purpose:** Voluntarily leave a team\n**Effect:** The demand request will be forwarded to the inquiries team to be reviewed.\n**Result:** Posted to https://discord.com/channels/1480550964762251445/1548423772778799207 with team capacity and demands used',
           inline: false,
         },
         {
@@ -94,7 +94,7 @@ module.exports = {
         {
           name: '🕐 Key Constraints',
           value: '• **Roster Size:** ' + constants.MAX_ROSTER_SIZE + ' players max per team\n' +
-            '• **Emergency Signings:** ' + constants.MAX_EMERGENCY_SIGNS_PER_TEAM + ' per season (window closed only)\n' +
+            '• **Emergency Contracts:** ' + constants.MAX_EMERGENCY_CONTRACTS_PER_TEAM + ' per season (window closed only)\n' +
             '• **Transfer Window:** Must be OPEN to use `/contract`\n',
           inline: false,
         },

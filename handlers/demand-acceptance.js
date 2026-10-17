@@ -109,14 +109,14 @@ function createDemandAcceptanceHandler(dependencies) {
     const teamCapacity = await builderHelpers.getDisplayedPlayersAmount(teamName);
     const updatedTeamInfo = await database.getTeamInfo(teamName);
     const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName)}**`;
-    const displayName = player.globalName || player.username;
+    const displayName = player.displayName || player.username;
     const demandEmbed = buildPSLEmbed(client, role?.color || constants.DEFAULT_EMBED_COLOR)
       .setTitle(`${formattedTeamName} Official Demand`)
       .setThumbnail(player.displayAvatarURL({ dynamic: true }))
       .addFields([
         {
           name: 'Player Demanded Release',
-          value: `**${displayName}** has been granted a demand from ${formattedTeamName} and is now a Free Agent. 📋`,
+          value: `**${displayName}** has been granted a demand from ${formattedTeamName} and is now a free agent. 📋`,
         },
         {
           name: 'Team Capacity',
@@ -152,7 +152,7 @@ function createDemandAcceptanceHandler(dependencies) {
       .setTitle('✅ Demand Accepted')
       .setDescription(
         `Your demand request for ${formattedTeamName} was accepted. ` +
-        'You have been released from your contract and are now a Free Agent.'
+        'You have been released from your contract and are now a free agent.'
       );
 
     await sendPlayerDM(client, playerId, acceptanceEmbed);

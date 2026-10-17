@@ -3,7 +3,6 @@ const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
-const { isChairman } = require('../utils/validations');
 
 const cooldowns = new Map();
 
@@ -33,8 +32,6 @@ module.exports = {
     const position = interaction.options.getString('position');
     const message = interaction.options.getString('message');
 
-    console.log(`\n🔍 [scout.js] Scout posted by ${user.tag}`);
-
     try {
       const staffRecord = await database.isUserStaffAnywhere(userId);
       if (!staffRecord) {
@@ -62,7 +59,7 @@ module.exports = {
         .setDescription(
           `**${formattedTeamName}** is scouting for players!\n\n` +
           `📌 **Position**: ${position}\n\n` +
-          `💬 **Message**:\n${message}\n\n` +
+          `💬 **Message**:\n\`\`\`${message}\`\`\`\n` +
           `*If you're interested and available, feel free to DM **${displayName}**!*`
         )
         .setThumbnail(user.displayAvatarURL());

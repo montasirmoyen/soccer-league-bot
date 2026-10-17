@@ -7,7 +7,7 @@ const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { safeRoleRemove, safeFetchMember } = require('../utils/discord-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
-const { validateGuild, isChairman } = require('../utils/validations');
+const { requireOfficialGuild, requireLeagueAdmin } = require('../utils/validations');
 const { updateTeamsRoster } = require('../utils/roster-updater');
 
 const CONFIRMATION_MESSAGE = 'I confirm disbanding this team and accepting the consequences.';
@@ -15,7 +15,7 @@ const CONFIRMATION_MESSAGE = 'I confirm disbanding this team and accepting the c
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('disband')
-        .setDescription("Disbands a team and removes all members from the roster.")
+        .setDescription('Disband a team and remove all members from the roster')
         .addStringOption((option) =>
             option
                 .setName('team')
@@ -31,19 +31,9 @@ module.exports = {
         ),
 
     async execute(interaction) {
-        if (!validateGuild(interaction)) {
-            return interaction.editReply({
-                content: '❌ You can only execute this command in the official server.',
-                flags: MessageFlags.Ephemeral,
-            });
-        }
+        if (!await requireOfficialGuild(interaction)) return;
 
-        if (!isChairman(interaction.member)) {
-            return interaction.editReply({
-                content: `❌ You don't have permission to disband a team.`,
-                flags: MessageFlags.Ephemeral,
-            });
-        }
+        if (!await requireLeagueAdmin(interaction, `❌ You don't have permission to disband a team.`)) return;
 
         const selectedTeam = interaction.options.getString('team');
         const confirmationMessage = interaction.options.getString('confirmation-message');
@@ -77,7 +67,7 @@ module.exports = {
             if (disbandsChannel) {
                 const disbandEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
                     .setTitle(`${formattedTeam} Official Disband`)
-                    .setDescription(`**${displayName}** has disbanded **${formattedTeam}**. All members in the roster have been released from their contracts and / or appointments.`)
+                    .setDescription(`**${displayName}** has disbanded **${formattedTeam}**. All members in the roster have been released from their contracts and/or appointments.`)
                 await disbandsChannel.send({ content: `<@&${teamInfo.roleId}>`, embeds: [disbandEmbed] });
             }
 

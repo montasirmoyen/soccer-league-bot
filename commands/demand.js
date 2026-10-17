@@ -9,30 +9,62 @@ const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
-const { validateGuild } = require('../utils/validations');
+const { requireOfficialGuild } = require('../utils/validations');
 
 const cooldowns = new Map();
 
-module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('demand')
-        .setDescription(`Voluntarily leave your team contract (Limit: ${constants.MAX_DEMANDS_PER_PLAYER} per season).`)
-        .addStringOption((option) =>
-            option
-                .setName('reason')
-                .setDescription('State the reason for the demand and link the desired evidence')
-                .setRequired(true)
-                //.setMinLength(100)
-                .setMaxLength(2000)
-        ),
+const ATTACHMENT_OPTION_DESCRIPTION = 'Attach any relevant evidence for the demand';
+const COOLDOWN_TIME = 60 * 60 * 1000;
+const MAX_ATTACHMENTS = 3;
+const MIN_REASON_LENGTH = 100;
+const MAX_REASON_LENGTH = 2000;
 
+const builder = new SlashCommandBuilder()
+    .setName('demand')
+    .setDescription(`Voluntarily leave your team contract (Limit: ${constants.MAX_DEMANDS_PER_PLAYER} per season)`)
+    .addStringOption((option) =>
+        option
+            .setName('reason')
+            .setDescription(`State the reason for the demand (Only ${MIN_REASON_LENGTH}-${MAX_REASON_LENGTH} characters allowed)`)
+            .setRequired(true)
+            .setMinLength(MIN_REASON_LENGTH)
+            .setMaxLength(MAX_REASON_LENGTH)
+    );
+
+for (let i = 1; i <= MAX_ATTACHMENTS; i++) {
+    builder.addAttachmentOption(option =>
+        option.setName(`attachment${i}`)
+            .setDescription(ATTACHMENT_OPTION_DESCRIPTION)
+            .setRequired(false)
+    );
+}
+
+module.exports = {
+    data: builder,
     async execute(interaction) {
-        if (!validateGuild(interaction)) {
-            return interaction.editReply({ content: '❌ You can only execute this command in the official server.', flags: MessageFlags.Ephemeral });
-        }
+        if (!await requireOfficialGuild(interaction)) return;
 
         const userId = interaction.user.id;
+        const restrictedActions = await database.getPlayerRestrictedActions(userId);
+
+        if (restrictedActions && restrictedActions.includes('DEMANDS')) {
+            return interaction.editReply({
+                content: `❌ You are currently frozen from demand requests.`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const now = Date.now();
         let pendingDemandCreated = false;
+        let pendingDemandTeam;
+
+        const cooldownState = builderHelpers.getCooldownState(userId, cooldowns, COOLDOWN_TIME, now);
+        if (cooldownState.isCoolingDown) {
+            return interaction.editReply({
+                content: `⏳ Please wait **${builderHelpers.formatCooldownDuration(cooldownState.timeLeftMs)}** before using this command again.`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
 
         try {
             const activeContract = await database.getContractedTeam(userId);
@@ -51,6 +83,7 @@ module.exports = {
             const demandReason = interaction.options.getString('reason');
 
             const playerTeam = activeContract.teamName;
+            pendingDemandTeam = playerTeam;
             const teamInfo = await database.getTeamInfo(playerTeam);
             const isManager = teamInfo?.manager === userId;
             const isAssistant = teamInfo?.assistantManager === userId;
@@ -59,7 +92,15 @@ module.exports = {
 
             if (isStaff) {
                 return interaction.editReply({
-                    content: '❌ Team managers and assistant managers cannot submit demand requests.',
+                    content: '❌ Managers and assistant managers cannot submit demand requests.',
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const existingDemand = await database.getPendingDemand(userId);
+            if (existingDemand) {
+                return interaction.editReply({
+                    content: '❌ You already have a demand request under review.',
                     flags: MessageFlags.Ephemeral
                 });
             }
@@ -72,10 +113,18 @@ module.exports = {
                 });
             }
             pendingDemandCreated = true;
+            cooldowns.set(userId, now);
 
+            const attachments = [];
+            for (let i = 1; i <= MAX_ATTACHMENTS; i++) {
+                const attachment = interaction.options.getAttachment(`attachment${i}`);
+                if (attachment) {
+                    attachments.push(attachment);
+                }
+            }
             const displayName = builderHelpers.getDiscordDisplayName(interaction.member, interaction.user);
             const role = await builderHelpers.getTeamRole(interaction.client, playerTeam);
-            const errorMessage = '❌ There was an error while forwarding this request to the inquiries team. Please reach the Staff team to proceed.'
+            const errorMessage = '❌ There was an error while forwarding this request to the inquiries team. Please reach the Staff team to proceed.';
 
             const demandRequestsChannel = await interaction.client.channels.fetch(constants.DEMAND_REQUESTS_CHANNEL_ID).catch(() => null);
             if (demandRequestsChannel) {
@@ -84,7 +133,7 @@ module.exports = {
                     .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
                     .setDescription(
                         `**${displayName}** has officially requested a demand in order to leave ${formattedTeamName}.\n\n` +
-                        `Please review their case thoroughly and make your decision below:`,
+                        `Please review their case thoroughly - analyze the evidence if applicable - and make your decision below:`,
                     );
 
                 const reasonChunks = demandReason.match(/.{1,1000}/gs) || ['No reason provided.'];
@@ -104,11 +153,17 @@ module.exports = {
                         .setStyle(ButtonStyle.Danger),
                 );
 
-                const mentions = `<@&${constants.SENIOR_MODERATOR_ROLE_ID}> <@&${constants.LEAD_MODERATOR_ROLE_ID}> <@&${constants.OVERSEER_ROLE_ID}> <@&${constants.CHAIRMAN_ROLE_ID}>`
+                const mentions = `<@&${constants.SENIOR_MODERATOR_ROLE_ID}> <@&${constants.LEAD_MODERATOR_ROLE_ID}> <@&${constants.SUPERVISOR_ROLE_ID}> <@&${constants.OVERSEER_ROLE_ID}> <@&${constants.CHAIRMAN_ROLE_ID}>`;
 
-                const forwardSuccess = await demandRequestsChannel.send({ content: mentions, embeds: [requestEmbed], components: [row] }).catch(console.warn);
+                const forwardSuccess = await demandRequestsChannel.send({
+                    content: mentions,
+                    embeds: [requestEmbed],
+                    files: attachments,
+                    components: [row]
+                }).catch(console.warn);
+
                 if (forwardSuccess) {
-                    interaction.editReply({ content: `📁 Your demand request has been **forwarded to the inquiries team**. Once a decision is taken, you'll be DMed with the result. Make sure to **open your DMs** to receive it!` });
+                    interaction.editReply({ content: `📁 Your demand request has been forwarded to the **inquiries team**. Once a decision is taken, you'll be DMed with the result. Make sure to **open your DMs** to receive it!` });
                 } else {
                     await database.clearPendingDemand(userId, playerTeam);
                     return interaction.editReply({ content: errorMessage });
@@ -119,12 +174,10 @@ module.exports = {
             }
         } catch (error) {
             console.error('❌ Error in /demand:', error);
-            if (pendingDemandCreated) {
-                await database.clearPendingDemand(userId).catch(() => {});
+            if (pendingDemandCreated && pendingDemandTeam) {
+                await database.clearPendingDemand(userId, pendingDemandTeam).catch(() => null);
             }
-            if (!interaction.replied) {
-                interaction.editReply({ content: '❌ An error occurred processing your demand.', flags: MessageFlags.Ephemeral });
-            }
+            return interaction.editReply({ content: '❌ An internal error occurred while processing your request.' });
         }
-    },
+    }
 };

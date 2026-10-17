@@ -4,10 +4,11 @@ const Team = require('./models/team');
 const Configuration = require('./models/configuration');
 const PlayerHistory = require('./models/player-history');
 const configTeams = require('../config/teams');
+const constants = require('../config/constants')
 const { logError } = require('../utils/error-handler');
 
 async function connectMongo() {
-  await mongoose.connect(process.env.MONGODB_URI);
+  await mongoose.connect(constants.MONGODB_URI);
 }
 
 module.exports = {
@@ -17,17 +18,24 @@ module.exports = {
 
   getContractedTeam: (userId) => Contract.findOne({ userId }).exec(),
 
-  getPlayerSigningsCount: async (userId) => {
+  getIndividualContractsCount: async (userId) => {
     const history = await PlayerHistory.findOne({ userId }).exec();
-    return history ? history.signingsUsed : 0;
+    return history ? history.contractsUsed : 0;
   },
 
-  contractPlayer: async (userId, teamName, countSigning = true) => {
-    if (countSigning) {
+  setIndividualContractsCount: (userId, newValue) =>
+    PlayerHistory.findOneAndUpdate(
+      { userId },
+      { $set: { contractsUsed: newValue } },
+      { new: true, upsert: true }
+    ),
+
+  contractPlayer: async (userId, teamName, countContract = true) => {
+    if (countContract) {
       await PlayerHistory.findOneAndUpdate(
         { userId },
         {
-          $inc: { signingsUsed: 1 },
+          $inc: { contractsUsed: 1 },
           $setOnInsert: { userId }
         },
         { new: true, upsert: true }
@@ -76,10 +84,22 @@ module.exports = {
     );
   },
 
-  incrementEmergencySign: (teamName) =>
+  getTeamEmergencyContractsCount: async (teamName) => {
+    const team = await Team.findOne({ name: teamName.toUpperCase() }).exec();
+    return team ? team.emergencyContractsUsed : 0;
+  },
+
+  incrementEmergencyContract: (teamName) =>
     Team.findOneAndUpdate(
       { name: teamName.toUpperCase() },
-      { $inc: { emergencySignsUsed: 1 } },
+      { $inc: { emergencyContractsUsed: 1 } },
+      { new: true }
+    ),
+
+  setEmergencyContractsCount: (teamName, newValue) =>
+    Team.findOneAndUpdate(
+      { name: teamName.toUpperCase() },
+      { $set: { emergencyContractsUsed: newValue } },
       { new: true }
     ),
 
@@ -92,28 +112,41 @@ module.exports = {
     return history ? history.demandsUsed : 0;
   },
 
-  createPendingDemand: (userId, teamName, reason) =>
-    PlayerHistory.findOneAndUpdate(
-      {
-        userId,
-        $or: [
-          { pendingDemand: { $exists: false } },
-          { pendingDemand: null }
-        ]
-      },
-      {
-        $set: {
-          pendingDemand: {
-            teamName: teamName.toUpperCase(),
-            reason,
-            status: 'pending',
-            requestedAt: new Date()
-          }
+  getPendingDemand: async (userId) => {
+    const history = await PlayerHistory.findOne({ userId }, { pendingDemand: 1 }).exec();
+    return history?.pendingDemand || null;
+  },
+
+  createPendingDemand: async (userId, teamName, reason) => {
+    try {
+      return await PlayerHistory.findOneAndUpdate(
+        {
+          userId,
+          $or: [
+            { pendingDemand: { $exists: false } },
+            { pendingDemand: null }
+          ]
         },
-        $setOnInsert: { userId }
-      },
-      { new: true, upsert: true }
-    ).exec(),
+        {
+          $set: {
+            pendingDemand: {
+              teamName: teamName.toUpperCase(),
+              reason,
+              status: 'pending',
+              requestedAt: new Date()
+            }
+          },
+          $setOnInsert: { userId }
+        },
+        { new: true, upsert: true }
+      ).exec();
+    } catch (error) {
+      if (error.code === 11000 && (error.keyPattern?.userId || error.keyValue?.userId)) {
+        return null;
+      }
+      throw error;
+    }
+  },
 
   claimPendingDemand: (userId, teamName) =>
     PlayerHistory.findOneAndUpdate(
@@ -165,6 +198,32 @@ module.exports = {
     PlayerHistory.findOneAndUpdate(
       { userId },
       { $inc: { demandsUsed: 1 } },
+      { new: true, upsert: true }
+    ),
+
+  setPlayerDemandsCount: (userId, newValue) =>
+    PlayerHistory.findOneAndUpdate(
+      { userId },
+      { $set: { demandsUsed: newValue } },
+      { new: true, upsert: true }
+    ),
+
+  getPlayerRestrictedActions: async (userId) => {
+    const history = await PlayerHistory.findOne({ userId }).exec();
+    return history ? history.restrictedActions || [] : [];
+  },
+
+  restrictPlayerAction: (userId, action) =>
+    PlayerHistory.findOneAndUpdate(
+      { userId },
+      { $addToSet: { restrictedActions: action } },
+      { new: true, upsert: true }
+    ),
+
+  unrestrictPlayerAction: (userId, action) =>
+    PlayerHistory.findOneAndUpdate(
+      { userId },
+      { $pull: { restrictedActions: action } },
       { new: true, upsert: true }
     ),
 
@@ -256,7 +315,7 @@ module.exports = {
         roleId: teamData.ROLE_ID,
         manager: null,
         assistantManager: null,
-        emergencySignsUsed: 0,
+        emergencyContractsUsed: 0,
       }));
 
       await Team.insertMany(teamsToCreate);

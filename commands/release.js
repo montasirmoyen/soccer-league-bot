@@ -1,73 +1,79 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const database       = require('../db/database');
-const constants      = require('../config/constants');
+const database = require('../db/database');
+const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
-const { buildPSLEmbed }                  = require('../utils/embed-helpers');
+const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { safeRoleRemove, safeFetchMember } = require('../utils/discord-helpers');
-const { canManageTeam, isChairman, validateGuild }    = require('../utils/validations');
-const { updateTeamsRoster }               = require('../utils/roster-updater');
+const { canManageTeam, isLeagueAdmin, requireOfficialGuild } = require('../utils/validations');
+const { updateTeamsRoster } = require('../utils/roster-updater');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('release')
-    .setDescription('Releases a player or staff member from their national team contract.')
+    .setDescription('Release a player / staff member from their team contract')
     .addUserOption((option) =>
-      option.setName('player').setDescription('Player to release').setRequired(true),
+      option
+          .setName('player')
+          .setDescription('Player to release')
+          .setRequired(true),
     ),
 
   async execute(interaction) {
-    if (!validateGuild(interaction)) {
-      return interaction.editReply({
-        content: '❌ You can only execute this command in the official server.',
-        flags: MessageFlags.Ephemeral,
-      });
-    }
+    if (!await requireOfficialGuild(interaction)) return;
 
     const targetMember = interaction.options.getMember('player');
     const targetUser = interaction.options.getUser('player');
-    const displayName = targetMember ? targetMember.displayName : (targetUser.globalName || targetUser.username);
-    const userId      = targetUser.id;
+    const displayName = targetMember.displayName || targetUser.username;
+    const userId = targetUser.id;
 
     if (targetUser.bot) {
       return interaction.editReply({
-        content: '❌ Bots do not have contracts.',
-        flags: MessageFlags.Ephemeral,
+        content: '❌ You cannot release a bot.',
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    const activeContract = await database.getContractedTeam(userId);
+    if (!activeContract) {
+      return interaction.editReply({
+        content: `❌ **${displayName}** is already a free agent.`,
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    const playerTeam = activeContract.teamName;
+    const teamInfo = await database.getTeamInfo(playerTeam);
+    const formattedTeamName = `**${builderHelpers.getFormattedTeamName(playerTeam)}**`;
+
+    if (!canManageTeam(interaction.member, teamInfo)) {
+      return interaction.editReply({
+        content: `❌ You do not have permission to release players from ${formattedTeamName}.`,
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    const restrictedActions = await database.getPlayerRestrictedActions(userId);
+    if (restrictedActions && restrictedActions.includes('RELEASES')) {
+      return interaction.editReply({
+        content: `❌ <@${userId}> is currently frozen from being released.`,
+        flags: MessageFlags.Ephemeral
       });
     }
 
     try {
-      const activeContract = await database.getContractedTeam(userId);
-      if (!activeContract) {
-        return interaction.editReply({
-          content: `❌ **${displayName}** is already a **Free Agent**.`,
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-
-      const playerTeam        = activeContract.teamName;
-      const teamInfo          = await database.getTeamInfo(playerTeam);
-      const formattedTeamName = `**${builderHelpers.getFormattedTeamName(playerTeam)}**`;
-
-      if (!canManageTeam(interaction.member, teamInfo)) {
-        return interaction.editReply({
-          content: `❌ You do not have permission to release players from ${formattedTeamName}.`,
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-
-      if (userId === interaction.user.id && !isChairman(interaction.member)) {
+      if (userId === interaction.user.id && !isLeagueAdmin(interaction.member)) {
         return interaction.editReply({
           content: `❌ You cannot release yourself from ${formattedTeamName}.`,
-          flags: MessageFlags.Ephemeral,
+          flags: MessageFlags.Ephemeral
         });
       }
 
-      const isManager   = teamInfo.manager          === userId;
+      const isManager = teamInfo.manager === userId;
       const isAssistant = teamInfo.assistantManager === userId;
-      const isStaff     = isManager || isAssistant;
-      const staffRole         = isManager ? 'manager' : 'assistant';
+      const isStaff = isManager || isAssistant;
+      const staffRole = isManager ? 'manager' : 'assistant';
       const globalStaffRoleId = isManager ? constants.MANAGER_ROLE_ID : constants.ASSISTANT_MANAGER_ROLE_ID;
-      const staffRoleName     = isManager ? 'Manager' : 'Assistant Manager';
+      const staffRoleName = isManager ? 'Manager' : 'Assistant Manager';
 
       if (isStaff) {
         await database.appointStaff(playerTeam, null, staffRole);
@@ -78,7 +84,7 @@ module.exports = {
         content: isStaff
           ? `✅ **${displayName}** has been released from ${formattedTeamName} and their **${staffRoleName}** position has been cleared.`
           : `✅ **${displayName}** has been released from ${formattedTeamName}.`,
-        flags: MessageFlags.Ephemeral,
+        flags: MessageFlags.Ephemeral
       });
 
       (async () => {
@@ -116,15 +122,15 @@ module.exports = {
                     : `**${displayName}** has been released from ${formattedTeamName} and is now a Free Agent. 📋`,
                 },
                 {
-                  name:  'Team Capacity',
+                  name: 'Team Capacity',
                   value: `**${teamCapacity}**`,
                 },
               ]);
 
             const mentions = [
               `<@${userId}>`,
-              updatedTeamInfo?.manager          ? `<@${updatedTeamInfo.manager}>`          : null,
-              updatedTeamInfo?.assistantManager  ? `<@${updatedTeamInfo.assistantManager}>` : null,
+              updatedTeamInfo?.manager ? `<@${updatedTeamInfo.manager}>` : null,
+              updatedTeamInfo?.assistantManager ? `<@${updatedTeamInfo.assistantManager}>` : null,
             ]
               .filter(Boolean)
               .join(' ');
@@ -143,7 +149,7 @@ module.exports = {
       if (!interaction.replied) {
         interaction.editReply({
           content: '❌ An unexpected error occurred during release.',
-          flags: MessageFlags.Ephemeral,
+          flags: MessageFlags.Ephemeral
         });
       }
     }

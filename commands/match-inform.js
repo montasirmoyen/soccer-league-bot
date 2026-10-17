@@ -2,7 +2,7 @@ const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const database = require('../db/database');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
-const { isRefereeOrAdmin, validateGuild } = require('../utils/validations');
+const { isRefereeOrAdmin, requireOfficialGuild } = require('../utils/validations');
 const constants = require('../config/constants');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -10,7 +10,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('match-inform')
-    .setDescription('Send a match notification to all players and staff of two teams via DM.')
+    .setDescription('Send a match notification to all players and staff of two teams via DM')
     .addStringOption((option) =>
       option.setName('team1').setDescription('First team').setRequired(true)
         .addChoices(builderHelpers.getTeamChoices())
@@ -22,26 +22,29 @@ module.exports = {
     .addStringOption((option) =>
       option
         .setName('referee-message')
-        .setDescription('Match details, kickoff info, or referee notes')
+        .setDescription('Match details, kickoff info, or referee notes (Max. 1000 characters)')
         .setRequired(false)
         .setMaxLength(1000)
     ),
 
   async execute(interaction) {
-    if (!validateGuild(interaction)) {
-      return interaction.editReply({ content: '❌ This command can only be used in the official server.', flags: MessageFlags.Ephemeral });
-    }
+    if (!await requireOfficialGuild(interaction, '❌ This command can only be used in the official server.')) return;
 
-    if (!isRefereeOrAdmin(interaction.member)) {
-      return interaction.editReply({ content: '❌ Only Referees, Chairmen, and Overseers can use this command.', flags: MessageFlags.Ephemeral });
-    }
+    if (!await isRefereeOrAdmin(interaction, interaction.member)) return;
 
     const team1 = interaction.options.getString('team1');
     const team2 = interaction.options.getString('team2');
-    const refereeMessage = interaction.options.getString('referee-message');
+    const refereeMessage = interaction.options.getString('referee-message') || 'N/A';
 
     if (team1 === team2) {
       return interaction.editReply({ content: '❌ Both teams cannot be the same.', flags: MessageFlags.Ephemeral });
+    }
+
+    const team1Players = await database.getPlayersByTeam(team1);
+    const team2Players = await database.getPlayersByTeam(team2);
+
+    if (team1Players.length + team2Players.length === 0) {
+      return interaction.editReply({ content: '❌ Both teams have no registered players.', flags: MessageFlags.Ephemeral });
     }
 
     console.log(`\n⚽ [match-inform.js] Match inform triggered by ${interaction.user.tag}: ${team1} vs ${team2}`);
@@ -56,11 +59,13 @@ module.exports = {
 
       const formattedTeam1 = builderHelpers.getFormattedTeamName(team1);
       const formattedTeam2 = builderHelpers.getFormattedTeamName(team2);
+      const issuer = interaction.member;
+      const issuerDisplayName = issuer.displayName || issuer.username;
 
       const matchEmbed = buildPSLEmbed(interaction.client, constants.WARNING_COLOR)
-        .setTitle('🏆 OFFICIAL MATCH NOTIFICATION')
+        .setTitle('🏆 Official Match Notification')
         .setDescription(
-          `**${formattedTeam1}** vs **${formattedTeam2}**\n\n` +
+          `**${formattedTeam1}** ⚔ **${formattedTeam2}**\n\n` +
           `📋 **Referee Notes:**\n${refereeMessage}`
         )
         .addFields(
@@ -84,7 +89,7 @@ module.exports = {
           },
           {
             name: '🏁 Issued by',
-            value: `<@${interaction.user.id}>`,
+            value: `${issuerDisplayName}`,
             inline: false,
           }
         );

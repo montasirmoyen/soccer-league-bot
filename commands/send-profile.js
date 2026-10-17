@@ -33,7 +33,7 @@ module.exports = {
     .addStringOption((option) =>
       option
         .setName('summary')
-        .setDescription('A brief summary about you (Max 100 chars)')
+        .setDescription('A brief summary about you (Max. 100 characters)')
         .setRequired(true)
         .setMaxLength(100)
     ),
@@ -65,7 +65,7 @@ module.exports = {
       const profileEmbed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
         .setTitle('📝 Player Profile Registered')
         .setThumbnail(user.displayAvatarURL({ dynamic: true }))
-        .setDescription(`⚽ **${displayName}** is now looking forward for new experiences!\n\nManagers can offer a contract using \`/contract\``)
+        .setDescription(`⚽ **${displayName}** is now looking forward for new experiences!\n\nManagers can offer a contract using \`/contract\` or \`/emergency-contract\``)
         .addFields(
           { name: '🏃 Preferred Position', value: position, inline: true },
           { name: '🌐 Region / Timezone', value: region, inline: true },

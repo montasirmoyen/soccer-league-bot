@@ -72,7 +72,7 @@ module.exports = {
         ),
 
     async execute(interaction) {
-        if (!requireLeagueAdmin(interaction)) return;
+        if (!await requireLeagueAdmin(interaction)) return;
 
         const action = interaction.options.getSubcommand();
         const data = interaction.options.getString('data');

@@ -1,14 +1,16 @@
-const { ActionRowBuilder, ButtonBuilder, MessageFlags } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const constants = require('../config/constants');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { safeFetchMember, safeRoleRemove } = require('../utils/discord-helpers');
 const { logError } = require('../utils/error-handler');
+const { logCommandResult } = require('../utils/log-helpers');
 
 const DECISION_ROLE_IDS = [
   constants.SENIOR_MODERATOR_ROLE_ID,
   constants.LEAD_MODERATOR_ROLE_ID,
+  constants.SUPERVISOR_ROLE_ID,
   constants.OVERSEER_ROLE_ID,
-  constants.CHAIRMAN_ROLE_ID,
+  constants.CHAIRMAN_ROLE_ID
 ];
 
 function parseDemandButton(customId) {
@@ -63,6 +65,24 @@ function createDemandAcceptanceHandler(dependencies) {
     }
   }
 
+  async function updateDemandRequest(interaction, decision, handlerDisplayName) {
+    try {
+      const embeds = interaction.message.embeds.map((embed, index) => {
+        if (index !== 0) return EmbedBuilder.from(embed);
+
+        return EmbedBuilder.from(embed).addFields(
+          { name: 'Staff Responsible', value: handlerDisplayName }
+        );
+      });
+
+      await interaction.message.edit({ embeds, components: [] });
+      return true;
+    } catch (error) {
+      console.warn('[demand-acceptance] Could not update demand request:', error.message);
+      return false;
+    }
+  }
+
   async function expireRequest(interaction, client, playerId, teamName, reason) {
     await database.clearPendingDemand(playerId, teamName);
 
@@ -101,15 +121,15 @@ function createDemandAcceptanceHandler(dependencies) {
     return { teamInfo, activeContract, demandsUsed };
   }
 
-  async function postAcceptedDemand(client, player, teamName, teamInfo, demandsUsed) {
+  async function postAcceptedDemand(client, player, member, teamName, demandsUsed, handlerDisplayName) {
     const demandChannel = await client.channels.fetch(constants.DEMANDS_CHANNEL_ID).catch(() => null);
-    if (!demandChannel?.isTextBased?.()) return;
+    if (!demandChannel?.isTextBased?.()) return false;
 
     const role = await builderHelpers.getTeamRole(client, teamName);
     const teamCapacity = await builderHelpers.getDisplayedPlayersAmount(teamName);
     const updatedTeamInfo = await database.getTeamInfo(teamName);
     const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName)}**`;
-    const displayName = player.displayName || player.username;
+    const displayName = member.displayName;
     const demandEmbed = buildPSLEmbed(client, role?.color || constants.DEFAULT_EMBED_COLOR)
       .setTitle(`${formattedTeamName} Official Demand`)
       .setThumbnail(player.displayAvatarURL({ dynamic: true }))
@@ -126,6 +146,10 @@ function createDemandAcceptanceHandler(dependencies) {
           name: 'Demands Used',
           value: `**${demandsUsed}/${constants.MAX_DEMANDS_PER_PLAYER}**`,
         },
+        {
+          name: 'Staff Responsible',
+          value: `**${handlerDisplayName}**`,
+        },
       ]);
 
     const mentions = [
@@ -133,10 +157,11 @@ function createDemandAcceptanceHandler(dependencies) {
       updatedTeamInfo?.assistantManager ? `<@${updatedTeamInfo.assistantManager}>` : null,
     ].filter(Boolean).join(' ');
 
-    await demandChannel.send({ content: mentions, embeds: [demandEmbed] }).catch(console.warn);
+    await demandChannel.send({ content: mentions, embeds: [demandEmbed] });
+    return true;
   }
 
-  async function processAccepted(interaction, client, playerId, teamName, teamInfo, player) {
+  async function processAccepted(interaction, client, playerId, teamName, teamInfo, player, handlerDisplayName) {
     const member = await safeFetchMember(interaction.guild, playerId);
     if (!member) throw new Error('Demandee could not be found in the guild.');
 
@@ -147,27 +172,82 @@ function createDemandAcceptanceHandler(dependencies) {
     const updatedHistory = await database.acceptPendingDemand(playerId, teamName);
     if (!updatedHistory) throw new Error('Pending demand could not be completed.');
 
+    await logCommandResult(interaction, {
+      command: 'demand-review',
+      commandLabel: 'Demand review buttons',
+      title: 'Demand Request Accepted',
+      details: [
+        { label: 'Player', value: `**${member.displayName}** (\`${playerId}\`)`, terminalValue: `${member.displayName} (${playerId})` },
+        { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(teamName)}**`, terminalValue: teamName },
+        { label: 'Decision', value: 'Accepted', terminalValue: 'Accepted' },
+        { label: 'Demands Used', value: `${updatedHistory.demandsUsed}/${constants.MAX_DEMANDS_PER_PLAYER}`, terminalValue: `${updatedHistory.demandsUsed}/${constants.MAX_DEMANDS_PER_PLAYER}` },
+      ],
+      result: `The demand request was accepted by **${handlerDisplayName}**. The player was released from **${builderHelpers.getFormattedTeamName(teamName)}**.`,
+      terminalResult: `Demand accepted for ${member.displayName} (${playerId}) from ${teamName}.`,
+    });
+
     const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName)}**`;
     const acceptanceEmbed = buildPSLEmbed(client, constants.SUCCESS_COLOR)
       .setTitle('✅ Demand Accepted')
       .setDescription(
         `Your demand request for ${formattedTeamName} was accepted. ` +
         'You have been released from your contract and are now a free agent.'
-      );
+      )
+      .addFields({ name: 'Staff Responsible', value: handlerDisplayName });
 
-    await sendPlayerDM(client, playerId, acceptanceEmbed);
+    const dmSent = await sendPlayerDM(client, playerId, acceptanceEmbed);
     await interaction.editReply({
       content: '✅ Demand accepted and processed successfully.',
       components: [],
     }).catch(console.warn);
 
-    await postAcceptedDemand(client, player, teamName, teamInfo, updatedHistory.demandsUsed);
+    const requestUpdated = await updateDemandRequest(interaction, 'Accepted', handlerDisplayName);
+    const announcementPosted = await postAcceptedDemand(
+      client,
+      player,
+      member,
+      teamName,
+      updatedHistory.demandsUsed,
+      handlerDisplayName
+    );
     await updateTeamsRoster(client);
+    const followUpIssues = [];
+    if (!dmSent) followUpIssues.push('The player notification could not be delivered.');
+    if (!requestUpdated) followUpIssues.push('The demand review message could not be updated.');
+    if (!announcementPosted) followUpIssues.push('The public demand announcement channel was unavailable.');
+    if (followUpIssues.length) {
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Demand Accepted With Follow-Up Issues',
+        command: 'demand-review',
+        commandLabel: 'Demand review buttons',
+        details: [
+          { label: 'Player', value: `**${member.displayName}** (\`${playerId}\`)`, terminalValue: `${member.displayName} (${playerId})` },
+          { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(teamName)}**`, terminalValue: teamName },
+          { label: 'Follow-Up Issues', value: followUpIssues.join('\n'), terminalValue: followUpIssues.join('; ') },
+        ],
+        result: 'The demand was accepted and the player was released, but one or more notifications or announcements failed.',
+        terminalResult: `Demand accepted for ${teamName}; follow-up issues: ${followUpIssues.join('; ')}.`,
+      });
+    }
   }
 
-  async function processRejected(interaction, client, playerId, teamName, player) {
+  async function processRejected(interaction, client, playerId, teamName, player, handlerDisplayName) {
     const clearedHistory = await database.clearPendingDemand(playerId, teamName);
     if (!clearedHistory) throw new Error('Pending demand could not be cleared.');
+
+    await logCommandResult(interaction, {
+      command: 'demand-review',
+      commandLabel: 'Demand review buttons',
+      title: 'Demand Request Rejected',
+      details: [
+        { label: 'Player', value: `**${player.displayName || player.username}** (\`${playerId}\`)`, terminalValue: `${player.displayName || player.username} (${playerId})` },
+        { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(teamName)}**`, terminalValue: teamName },
+        { label: 'Decision', value: 'Rejected', terminalValue: 'Rejected' },
+      ],
+      result: `The demand request was rejected by **${handlerDisplayName}**. The player's contract remains active with **${builderHelpers.getFormattedTeamName(teamName)}**.`,
+      terminalResult: `Demand rejected for ${player.displayName || player.username} (${playerId}) at ${teamName}.`,
+    });
 
     const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName)}**`;
     const refusalEmbed = buildPSLEmbed(client, constants.ERROR_COLOR)
@@ -175,13 +255,33 @@ function createDemandAcceptanceHandler(dependencies) {
       .setDescription(
         `Your demand request for ${formattedTeamName} was refused. ` +
         'Your contract remains active and this decision is final.'
-      );
+      )
+      .addFields({ name: 'Staff Responsible', value: handlerDisplayName });
 
-    await sendPlayerDM(client, playerId, refusalEmbed);
+    const dmSent = await sendPlayerDM(client, playerId, refusalEmbed);
     await interaction.editReply({
       content: '❌ Demand refused. The player has been notified.',
       components: [],
     }).catch(console.warn);
+    const requestUpdated = await updateDemandRequest(interaction, 'Denied', handlerDisplayName);
+    const followUpIssues = [];
+    if (!dmSent) followUpIssues.push('The player notification could not be delivered.');
+    if (!requestUpdated) followUpIssues.push('The demand review message could not be updated.');
+    if (followUpIssues.length) {
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Demand Rejected With Follow-Up Issues',
+        command: 'demand-review',
+        commandLabel: 'Demand review buttons',
+        details: [
+          { label: 'Player', value: `**${player.displayName || player.username}** (\`${playerId}\`)`, terminalValue: `${player.displayName || player.username} (${playerId})` },
+          { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(teamName)}**`, terminalValue: teamName },
+          { label: 'Follow-Up Issues', value: followUpIssues.join('\n'), terminalValue: followUpIssues.join('; ') },
+        ],
+        result: 'The demand was rejected, but one or more notifications or review-message updates failed.',
+        terminalResult: `Demand rejected for ${teamName}; follow-up issues: ${followUpIssues.join('; ')}.`,
+      });
+    }
   }
 
   async function handleButtonInteraction(interaction, client) {
@@ -207,6 +307,8 @@ function createDemandAcceptanceHandler(dependencies) {
 
     const { action, playerId, teamName } = parsed;
     const userId = interaction.user.id;
+    const handlerDisplayName = interaction.member?.displayName || interaction.user.globalName || interaction.user.username;
+    let playerDisplayName = interaction.guild.members.cache.get(playerId)?.displayName || 'Unknown user';
     if (checkPlayerOperationConflict(playerId)) {
       await interaction.reply({
         content: '⏳ Another action is already processing for this player.',
@@ -228,8 +330,31 @@ function createDemandAcceptanceHandler(dependencies) {
     try {
       await interaction.update({ components: buildButtonRows(originalComponents, true) });
     } catch (error) {
-      await database.restorePendingDemand(playerId, teamName);
+      let restoreError;
+      try {
+        await database.restorePendingDemand(playerId, teamName);
+      } catch (error) {
+        restoreError = error;
+      }
       console.warn('[demand-acceptance] Could not lock buttons:', error.message);
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: restoreError ? 'Demand Review Lock and Recovery Failed' : 'Demand Review Could Not Start',
+        command: 'demand-review',
+        commandLabel: 'Demand review buttons',
+        details: [
+          { label: 'Player', value: `**${playerDisplayName}** (\`${playerId}\`)`, terminalValue: `${playerDisplayName} (${playerId})` },
+          { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(teamName)}**`, terminalValue: teamName },
+          { label: 'Attempted Decision', value: action === 'accept' ? 'Accept' : 'Reject', terminalValue: action },
+        ],
+        result: restoreError
+          ? 'The demand review could not start and the request could not be restored for later review.'
+          : 'The demand review could not start; no decision was applied.',
+        terminalResult: restoreError
+          ? 'Demand review could not start and pending state restoration failed.'
+          : 'Demand review could not start.',
+        error: restoreError || error,
+      });
       return true;
     }
 
@@ -247,13 +372,45 @@ function createDemandAcceptanceHandler(dependencies) {
       }
 
       const player = await client.users.fetch(playerId);
+      playerDisplayName = player.displayName || player.username;
       if (action === 'accept') {
-        await processAccepted(interaction, client, playerId, teamName, validation.teamInfo, player);
+        await processAccepted(
+          interaction,
+          client,
+          playerId,
+          teamName,
+          validation.teamInfo,
+          player,
+          handlerDisplayName
+        );
       } else {
-        await processRejected(interaction, client, playerId, teamName, player);
+        await processRejected(interaction, client, playerId, teamName, player, handlerDisplayName);
       }
     } catch (error) {
-      await database.restorePendingDemand(playerId, teamName);
+      let restoreError;
+      try {
+        await database.restorePendingDemand(playerId, teamName);
+      } catch (error) {
+        restoreError = error;
+      }
+      await logCommandResult(interaction, {
+        type: 'error',
+        commandLabel: 'Demand review buttons',
+        title: restoreError ? 'Demand Processing and Recovery Failed' : 'Demand Processing Failed',
+        command: 'demand-review',
+        details: [
+          { label: 'Player', value: `**${playerDisplayName}** (\`${playerId}\`)`, terminalValue: `${playerDisplayName} (${playerId})` },
+          { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(teamName)}**`, terminalValue: teamName },
+          { label: 'Attempted Decision', value: action === 'accept' ? 'Accept' : 'Reject', terminalValue: action },
+        ],
+        result: restoreError
+          ? 'Demand processing failed and the pending request could not be restored. The player/team state may already have changed; manual review is required.'
+          : 'Demand processing failed. The player/team state may already have changed; verify it before retrying.',
+        terminalResult: restoreError
+          ? 'Demand processing and pending-state restoration both failed.'
+          : 'Demand processing failed; verify resulting state before retrying.',
+        error: restoreError || error,
+      });
       await logError(error, client, {
         userId: playerId,
         teamName,

@@ -15,6 +15,7 @@ const database = require('./db/database');
 const { BOT_TOKEN } = require('./config/constants');
 const { safeReply, safeDeferReply } = require('./utils/discord-helpers');
 const { logError, replyWithError } = require('./utils/error-handler');
+const { logCommandResult } = require('./utils/log-helpers');
 const { registerGroupRankingHandler } = require('./handlers/group-ranking');
 const {
   createContractAcceptanceHandler,
@@ -48,6 +49,7 @@ const TIMERS = {
   MANAGING_COMMAND_COOLDOWN_MS: 4000,
   BUTTON_COOLDOWN_MS: 1000,
   COMMAND_EXECUTION_TIMEOUT_MS: 30000,
+  GROUP_SYNC_COMMAND_TIMEOUT_MS: 14 * 60 * 1000,
   ACCEPT_FLOW_TIMEOUT_MS: 25000,
   GUILD_FETCH_TIMEOUT_MS: 8000,
   NOTIFICATION_TIMEOUT_MS: 5000,
@@ -56,7 +58,7 @@ const TIMERS = {
 };
 
 const MANAGING_COMMANDS = [
-  'contract', 'emergency-contract', 'release', 'scout', 'scrim', 'appoint', 'disband', 'match=inform'
+  'contract', 'emergency-contract', 'release', 'scout', 'scrim', 'appoint', 'disband', 'match=inform', 'group-sync'
 ];
 
 const userCooldowns = new Map();
@@ -243,7 +245,9 @@ async function bootstrap() {
 
       await withTimeout(
         commandData.execute(interaction),
-        TIMERS.COMMAND_EXECUTION_TIMEOUT_MS,
+        command === 'group-sync'
+          ? TIMERS.GROUP_SYNC_COMMAND_TIMEOUT_MS
+          : TIMERS.COMMAND_EXECUTION_TIMEOUT_MS,
         'Command took too long to execute'
       );
 
@@ -256,6 +260,14 @@ async function bootstrap() {
 
       if (error instanceof TimeoutError) {
         console.warn(`⏱️  /${command} timed out for ${interaction.user.tag}`);
+        await logCommandResult(interaction, {
+          type: 'error',
+          title: 'Command Timed Out',
+          command,
+          result: 'The command exceeded its execution time limit and may not have completed. Verify the resulting state before retrying.',
+          terminalResult: 'Command exceeded its execution time limit.',
+          error,
+        });
         await safeRespond(interaction, {
           content: '⏱️ This is taking longer than expected. Please try again in a moment.',
           flags: MessageFlags.Ephemeral
@@ -263,6 +275,14 @@ async function bootstrap() {
         return;
       }
 
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Unexpected Command Failure',
+        command,
+        result: 'The command failed unexpectedly. Technical details were recorded in the terminal.',
+        terminalResult: 'Command failed unexpectedly.',
+        error,
+      });
       await logError(error, client, { userId, command, context: 'SLASH_COMMAND_EXECUTION_ERROR' });
       await safeRespond(interaction, {
         content: '❌ Something went wrong on our end. Please try again, and open a ticket if it keeps happening.',

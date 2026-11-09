@@ -3,6 +3,7 @@ const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { logCommandResult } = require('../utils/log-helpers');
 
 const cooldowns = new Map();
 
@@ -19,8 +20,8 @@ module.exports = {
     )
     .addStringOption((option) =>
       option
-        .setName('region')
-        .setDescription('Your timezone/region')
+        .setName('timezone')
+        .setDescription('Your timezone')
         .setRequired(true)
         .addChoices(builderHelpers.getTimezoneChoices())
     ),
@@ -30,9 +31,7 @@ module.exports = {
     const displayName = builderHelpers.getDiscordDisplayName(interaction.member, user);
     const userId = user.id;
     const position = interaction.options.getString('position');
-    const region = interaction.options.getString('region');
-
-    console.log(`\n🏃 [free-agent.js] Free agent registration by ${user.tag}`);
+    const timezone = interaction.options.getString('timezone');
 
     try {
       const contract = await database.getContractedTeam(userId);
@@ -63,13 +62,21 @@ module.exports = {
         .setDescription(
           `**${displayName}** has registered as a free agent!\n\n` +
           `📍 **Position**: ${position}\n` +
-          `🌍 **Region**: ${region}\n\n` +
-          `Managers can send contracts to this player using \`/contract\``
+          `🌍 **Timezone**: ${timezone}\n\n` +
+          `Managers can send contracts to this player using \`/contract\` or \`/emergency-contract\``
         )
         .setThumbnail(user.displayAvatarURL());
 
       const targetChannel = await interaction.client.channels.fetch(constants.FREEAGENT_CHANNEL_ID);
       if (!targetChannel) {
+        await logCommandResult(interaction, {
+          type: 'error',
+          title: 'Free Agent Registration Failed',
+          command: 'free-agent',
+          details: [{ label: 'Player', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` }],
+          result: 'The free agent channel could not be found; the registration announcement was not posted.',
+          terminalResult: 'Free agent channel was unavailable.',
+        });
         return interaction.editReply({
           content: '⚠️ Could not find the free agent channel.',
           flags: MessageFlags.Ephemeral
@@ -82,7 +89,15 @@ module.exports = {
         flags: MessageFlags.Ephemeral
       });
     } catch (error) {
-      console.error('❌ Error in /free-agent:', error);
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Free Agent Registration Failed',
+        command: 'free-agent',
+        details: [{ label: 'Player', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` }],
+        result: 'The free agent registration failed unexpectedly.',
+        terminalResult: 'Free agent registration failed.',
+        error,
+      });
       return interaction.editReply({ content: '❌ An error occurred while registering as a free agent.', flags: MessageFlags.Ephemeral });
     }
   },

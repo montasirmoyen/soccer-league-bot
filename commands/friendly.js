@@ -3,6 +3,7 @@ const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { logCommandResult } = require('../utils/log-helpers');
 
 const cooldowns = new Map();
 const COOLDOWN_TIME = 30 * 60 * 1000;
@@ -36,8 +37,6 @@ module.exports = {
     const user = interaction.user;
     const userId = user.id;
     const now = Date.now();
-
-    console.log(`\n⚽ [friendly.js] Friendly announcement by ${user.tag}`);
 
     const cooldownState = builderHelpers.getCooldownState(userId, cooldowns, COOLDOWN_TIME, now);
     if (cooldownState.isCoolingDown) {
@@ -94,9 +93,30 @@ module.exports = {
 
       const channel = await interaction.client.channels.fetch(constants.FRIENDLY_CHANNEL_ID);
       await channel.send({ content: mentions, embeds: [embed] });
+      if (isTeamStaff) {
+        await logCommandResult(interaction, {
+          command: 'friendly',
+          title: 'Team Staff Friendly Announcement Posted',
+          details: [
+            { label: 'Organizer', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` },
+            { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(staffRecord.name)}**`, terminalValue: staffRecord.name },
+            { label: 'Region', value: region, terminalValue: region },
+            { label: 'Type', value: type, terminalValue: type },
+          ],
+          result: 'A team staff member posted a friendly match announcement. No user-provided message or attachment content is included in this audit log.',
+        });
+      }
       await interaction.editReply({ content: '✅ Your friendly announcement has been sent! **Best of luck!**', flags: MessageFlags.Ephemeral });
     } catch (error) {
-      console.error('❌ Error in /friendly:', error);
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Friendly Announcement Failed',
+        command: 'friendly',
+        details: [{ label: 'Organizer', value: `**${user.tag}** (\`${userId}\`)`, terminalValue: `${user.tag} (${userId})` }],
+        result: 'The friendly announcement could not be completed.',
+        terminalResult: 'Friendly announcement failed.',
+        error,
+      });
       cooldowns.delete(userId);
       await interaction.editReply({ content: '❌ Failed to send friendly announcement.', flags: MessageFlags.Ephemeral });
     }

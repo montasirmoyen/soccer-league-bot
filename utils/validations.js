@@ -12,6 +12,10 @@ function isLeagueAdmin(member) {
   );
 }
 
+function isLeagueStaff(member) {
+  return Boolean(isLeagueAdmin(member) || member?.roles?.cache?.has(constants.MODERATOR_ROLE_ID) || member?.roles?.cache?.has(constants.STAFF_ROLE_ID));
+}
+
 async function requireLeagueAdmin(interaction, message = NO_PERMISSION) {
   if (isLeagueAdmin(interaction.member)) return true;
 
@@ -19,8 +23,15 @@ async function requireLeagueAdmin(interaction, message = NO_PERMISSION) {
   return false;
 }
 
+async function requireLeagueStaff(interaction, message = NO_PERMISSION) {
+  if (isLeagueStaff(interaction.member)) return true;
+
+  await interaction.editReply({ content: message, flags: MessageFlags.Ephemeral });
+  return false;
+}
+
 async function isRefereeOrAdmin(interaction, member) {
-  if (member?.roles?.cache?.has(constants.REFEREE_ROLE_ID) || isLeagueAdmin(member)) return true;
+  if (member?.roles?.cache?.has(constants.OFFICIAL_ROLE_ID) || isLeagueAdmin(member)) return true;
 
   await interaction.editReply({ content: NO_PERMISSION, flags: MessageFlags.Ephemeral });
   return false;
@@ -60,7 +71,7 @@ async function isRegistered(member) {
 
   try {
     const fetchedMember = await member.guild.members.fetch(member.id);
-    return fetchedMember.roles.cache.has(constants.REGISTERED_ROLE_ID);
+    return fetchedMember.roles.cache.has(constants.COMMUNITY_ROLE_ID);
   } catch (error) {
     console.error(`Error fetching member: ${error}`);
     return false;
@@ -69,7 +80,9 @@ async function isRegistered(member) {
 
 module.exports = {
   isLeagueAdmin,
+  isLeagueStaff,
   requireLeagueAdmin,
+  requireLeagueStaff,
   isRefereeOrAdmin,
   isTeamStaff,
   isTeamManager,

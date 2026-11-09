@@ -1,113 +1,113 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const database = require('../db/database');
 const constants = require('../config/constants');
-const builderHelpers = require('../utils/builder-helpers')
 const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { logCommandResult } = require('../utils/log-helpers');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('help')
-    .setDescription('Complete guide to all PSL bot commands and features'),
+    .setDescription('Quick guide to the commands every member can use'),
 
   async execute(interaction) {
-    console.log(`\n❓ [help.js] Help command requested by ${interaction.user.tag}`);
-
     try {
-      const positionChoices = builderHelpers.getPositionChoices();
-      let positionChoicesField = ``;
-      for (const position of positionChoices) {
-        positionChoicesField += ` ${position.name}`;
-      }
-
-      const regionChoices = builderHelpers.getTimezoneChoices();
-      let regionChoicesField = ``;
-      for (const region of regionChoices) {
-        regionChoicesField += ` ${region.name}`;
-      }
-
       const mainEmbed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
-        .setTitle('⚽ PSL COMPLETE COMMAND GUIDE')
-        .setDescription('**Pure Soccer League Bot** - All Commands in one place')
+        .setTitle('⚽ PSL Community Commands')
+        .setDescription('Everything you need to get involved, stay connected, and make the most of the league — quickly and professionally.')
         .setThumbnail(interaction.client.user.avatarURL());
 
       mainEmbed.addFields(
         {
-          name: '📝 `/free-agent [position] [region]`',
-          value: '**Purpose:** Register yourself as an available free agent\n**When to use:** After being released or starting season\n**Requirements:** No active contract',
+          name: '👥 Member Commands',
+          value: 'Open to everyone in the community.',
           inline: false,
         },
         {
-          name: '⚽ `/friendly [region] [option]`',
-          value: `**Purpose:** Find friendly matches for practice\n**Regions:** ${regionChoicesField}\n**Options:** DM TO PLAY, IN GAME ALREADY`,
+          name: '📝 `/free-agent`',
+          value: 'Register as a free agent and make yourself available to managers looking for players.',
           inline: false,
         },
         {
-          name: '📊 `/roster [team_name]`',
-          value: '**Purpose:** View current players on a team\n**Shows:** All contracted players with their positions\n**Usage:** Check team depth before joining',
+          name: '📣 `/send-profile`',
+          value: 'Share your profile with the community and show your position, timezone, and short summary.',
           inline: false,
         },
         {
-          name: '📋 `/contract [team_name] [player]`',
-          value: '**Purpose:** Send contract offer to player\n**Requirements:** Transfer window OPEN\n**Roster:** Team must have space (Max: ' + constants.MAX_ROSTER_SIZE + ')\n**Cooldown:** 4 seconds between sends\n**Result:** DM sent to player | Posted to https://discord.com/channels/1480550964762251445/1480569415622725662',
+          name: '⚽ `/friendly`',
+          value: 'Announce a friendly match and connect with players in your region.',
           inline: false,
         },
         {
-          name: '🚨 `/emergency-contract [team_name] [player]`',
-          value: '**Purpose:** Offer an emergency contract when the transfer window is CLOSED\n**Limit:** ' + constants.MAX_EMERGENCY_CONTRACTS_PER_TEAM + ' per team per season\n**Roster:** Team must have space\n**Cooldown:** 4 seconds between sends\n**Result:** DM sent to player | Posted to https://discord.com/channels/1480550964762251445/1480569415622725662 with emergency badge',
+          name: '📊 `/roster`',
+          value: 'Check a team’s official roster and keep up with the current squad.',
           inline: false,
         },
         {
-          name: '🔍 `/scout [position] [message]`',
-          value: '**Purpose:** Post wanted ad for specific player position\n**Message:** Custom recruitment note\n**Result:** Posted to https://discord.com/channels/1480550964762251445/1480569441241665620 for free agents to see\n**Cooldown:** 4 seconds',
+          name: '👤 `/view-profile`',
+          value: 'Open a player’s public profile to review their current team and activity.',
           inline: false,
         },
         {
-          name: '🧹 `/release [player]`',
-          value: '**Purpose:** Remove player from team\n**Effect:** Player becomes free agent immediately\n**Result:** Posted to https://discord.com/channels/1480550964762251445/1480772400894447678 with team capacity',
+          name: '⭐ `/rating`',
+          value: 'Submit or review feedback for staff members in a simple, transparent way.',
           inline: false,
         },
         {
-          name: '🚪 `/demand [reason]`',
-          value: '**Purpose:** Voluntarily leave a team\n**Effect:** The demand request will be forwarded to the inquiries team to be reviewed.\n**Result:** Posted to https://discord.com/channels/1480550964762251445/1548423772778799207 with team capacity and demands used',
+          name: '🏓 `/ping`',
+          value: 'Confirm the bot is online and responding normally.',
           inline: false,
         },
         {
-          name: '🎯 `/scrim [name] [region] [code] [sinfo]`',
-          value: '**Purpose:** Host scrims and invite community to play\n**Result:** Posted to https://discord.com/channels/1480550964762251445/1480569639233786027\n**Cooldown:** 1 hour',
+          name: '🏟️ Team Commands',
+          value: 'Built for teams to manage their operations and communicate with the league.',
           inline: false,
         },
         {
-          name: '🏆 `/appoint [team_name] [role] [player]`',
-          value: '**Purpose:** Assign manager or assistant manager\n**Roles:** manager, assistantManager\n**Requirement:** Staff role on team\n**Result:** Staff role assignment updated',
+          name: '📋 `/contract`',
+          value: 'Send a contract offer to a player during the transfer window.',
           inline: false,
         },
         {
-          name: '⚽ `/match-inform [team1] [team2] [notes]`',
-          value: '**Purpose:** Send a match notification to all players and staff of two teams\n**Permissions:** Referee, Chairman, Overseer\n**Result:** Polished match embed delivered to every player\'s DMs',
+          name: '🚨 `/emergency-contract`',
+          value: 'Request an emergency signing when the transfer window is closed.',
           inline: false,
         },
         {
-          name: '📍 Available Positions',
-          value: `${positionChoicesField}`,
+          name: '🧹 `/release`',
+          value: 'Remove a player from the squad and make them available again.',
           inline: false,
         },
         {
-          name: '🕐 Key Constraints',
-          value: '• **Roster Size:** ' + constants.MAX_ROSTER_SIZE + ' players max per team\n' +
-            '• **Emergency Contracts:** ' + constants.MAX_EMERGENCY_CONTRACTS_PER_TEAM + ' per season (window closed only)\n' +
-            '• **Transfer Window:** Must be OPEN to use `/contract`\n',
+          name: '👔 `/appoint`',
+          value: 'Assign or update manager and assistant manager roles inside the team structure.',
           inline: false,
         },
         {
-          name: '💬 Need Further Assistance?',
-          value: 'Contact us through tickets for clarification on specific rules or features.',
+          name: '📨 `/scout`',
+          value: 'Post a recruitment message to attract players for a specific position.',
+          inline: false,
+        },
+        {
+          name: '📢 `/match-inform`',
+          value: 'Send a match update to all players and staff linked to a selected fixture.',
+          inline: false,
+        },
+        {
+          name: '💬 Ready to join in?',
+          value: 'Use the commands above to stay active, manage your team, and contribute to the league community.',
           inline: false,
         }
       );
 
       await interaction.editReply({ embeds: [mainEmbed], flags: MessageFlags.Ephemeral });
     } catch (error) {
-      console.error('❌ Error in /help:', error);
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Help Guide Could Not Be Generated',
+        command: 'help',
+        result: 'The command guide could not be generated.',
+        terminalResult: 'Help guide generation failed.',
+        error,
+      });
       return interaction.editReply({ content: '❌ An error occurred generating help.', flags: MessageFlags.Ephemeral });
     }
   },

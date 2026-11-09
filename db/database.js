@@ -3,6 +3,7 @@ const Contract = require('./models/player-contract');
 const Team = require('./models/team');
 const Configuration = require('./models/configuration');
 const PlayerHistory = require('./models/player-history');
+const StaffRating = require('./models/staff-rating');
 const configTeams = require('../config/teams');
 const constants = require('../config/constants')
 const { logError } = require('../utils/error-handler');
@@ -226,6 +227,25 @@ module.exports = {
       { $pull: { restrictedActions: action } },
       { new: true, upsert: true }
     ),
+
+  // ── Staff Rating ─────────────────────────────────────────────────────────
+
+  getStaffRatings: (staffId) => StaffRating.find({ staffId }).exec(),
+
+  getStaffRatingByRaterId: (staffId, raterId) => {
+    const staffRating = StaffRating.findOne({ staffId, raterId }).exec();
+    return staffRating;
+  },
+
+  rateStaff: (staffId, raterId, stars, description = '') =>
+    StaffRating.findOneAndUpdate(
+      { staffId, raterId },
+      {
+        $set: { stars, description },
+        $setOnInsert: { staffId, raterId }
+      },
+      { upsert: true, new: true, runValidators: true }
+    ).exec(),
 
   // ── League Configuration ────────────────────────────────────────────────────────
 

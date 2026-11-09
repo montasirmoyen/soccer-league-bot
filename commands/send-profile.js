@@ -2,6 +2,7 @@ const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { logCommandResult } = require('../utils/log-helpers');
 
 const cooldowns = new Map();
 
@@ -18,8 +19,8 @@ module.exports = {
     )
     .addStringOption((option) =>
       option
-        .setName('region')
-        .setDescription('Your timezone/region')
+        .setName('timezone')
+        .setDescription('Your timezone')
         .setRequired(true)
         .addChoices(builderHelpers.getTimezoneChoices())
     )
@@ -44,7 +45,7 @@ module.exports = {
     const displayName = builderHelpers.getDiscordDisplayName(interaction.member, user);
 
     const position = interaction.options.getString('position');
-    const region = interaction.options.getString('region');
+    const timezone = interaction.options.getString('timezone');
     const nationality = interaction.options.getString('nationality') || 'No nationality provided';
     const summary = interaction.options.getString('summary') || 'No summary provided.';
 
@@ -68,13 +69,21 @@ module.exports = {
         .setDescription(`⚽ **${displayName}** is now looking forward for new experiences!\n\nManagers can offer a contract using \`/contract\` or \`/emergency-contract\``)
         .addFields(
           { name: '🏃 Preferred Position', value: position, inline: true },
-          { name: '🌐 Region / Timezone', value: region, inline: true },
+          { name: '🌐 Timezone', value: timezone, inline: true },
           { name: '🏳️ Nationality', value: nationality, inline: true },
           { name: '💬 Player Statement', value: `\`\`\`text\n${summary}\n\`\`\``, inline: false }
         );
 
       const playerInformationChannel = await interaction.client.channels.fetch(constants.PLAYER_INFORMATION_CHANNEL_ID);
       if (!playerInformationChannel) {
+        await logCommandResult(interaction, {
+          type: 'error',
+          title: 'Player Profile Could Not Be Posted',
+          command: 'send-profile',
+          details: [{ label: 'Player', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` }],
+          result: 'The player information channel could not be found; no profile was posted.',
+          terminalResult: 'Player information channel was unavailable.',
+        });
         return interaction.editReply({
           content: '⚠️ Free agency market channel not found.'
         });
@@ -87,7 +96,15 @@ module.exports = {
       });
 
     } catch (error) {
-      console.error('❌ Error in /send-profile:', error);
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Player Profile Posting Failed',
+        command: 'send-profile',
+        details: [{ label: 'Player', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` }],
+        result: 'The player profile could not be posted. User-provided profile text is not included in this audit log.',
+        terminalResult: 'Player profile posting failed.',
+        error,
+      });
       return interaction.editReply({ 
         content: '❌ An error occurred while processing your profile registration.' 
       });

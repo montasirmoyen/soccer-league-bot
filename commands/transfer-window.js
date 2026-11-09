@@ -4,6 +4,7 @@ const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { requireLeagueAdmin, requireOfficialGuild } = require('../utils/validations');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { logCommandResult, logValidationFailure } = require('../utils/log-helpers');
 
 const WINDOW_EMBED_TITLE = '⚽ Transfer Window Status';
 
@@ -14,26 +15,28 @@ function getTeamListDisplay(teamNames) {
 }
 
 async function updateTransferWindowEmbed(client, isOpen) {
-  const channel = await client.channels.fetch(constants.TRANSFER_WINDOW_CHANNEL_ID).catch(() => null);
-  if (!channel) return;
-
-  const config = await database.getTransferWindowConfig();
-  const relevantTeams = isOpen ? config.transferWindowDeniedTeams : config.transferWindowAllowedTeams;
-  const embed = buildPSLEmbed(client, isOpen ? constants.SUCCESS_COLOR : constants.ERROR_COLOR)
-    .setTitle(WINDOW_EMBED_TITLE)
-    .setDescription(
-      isOpen
-        ? 'The transfer window is now **OPEN**! Teams can register contracts.'
-        : 'The transfer window is now **CLOSED**! Allowed teams can register regular contracts; other teams may use emergency contracts.'
-    )
-    .addFields({
-      name: isOpen ? 'Contracts denied' : 'Contracts allowed',
-      value: getTeamListDisplay(relevantTeams),
-    });
-
-  const messagePayload = { content: isOpen ? '🟢' : '🔴', embeds: [embed] };
-
   try {
+    const channel = await client.channels.fetch(constants.TRANSFER_WINDOW_CHANNEL_ID);
+    if (!channel) {
+      console.warn('[transfer-window.js] Could not update transfer window channel: channel unavailable.');
+      return false;
+    }
+
+    const config = await database.getTransferWindowConfig();
+    const relevantTeams = isOpen ? config.transferWindowDeniedTeams : config.transferWindowAllowedTeams;
+    const embed = buildPSLEmbed(client, isOpen ? constants.SUCCESS_COLOR : constants.ERROR_COLOR)
+      .setTitle(WINDOW_EMBED_TITLE)
+      .setDescription(
+        isOpen
+          ? 'The transfer window is now **OPEN**! Teams can register contracts.'
+          : 'The transfer window is now **CLOSED**! Allowed teams can register regular contracts; other teams may use emergency contracts.'
+      )
+      .addFields({
+        name: isOpen ? 'Contracts denied' : 'Contracts allowed',
+        value: getTeamListDisplay(relevantTeams),
+      });
+
+    const messagePayload = { content: isOpen ? '🟢' : '🔴', embeds: [embed] };
     const recent = await channel.messages.fetch({ limit: 10 });
     const existing = recent.find(
       (message) => message.author.id === client.user.id && message.embeds[0]?.title === WINDOW_EMBED_TITLE,
@@ -44,8 +47,10 @@ async function updateTransferWindowEmbed(client, isOpen) {
     } else {
       await channel.send(messagePayload);
     }
+    return true;
   } catch (error) {
     console.warn('[transfer-window.js] Could not update transfer window channel:', error.message);
+    return false;
   }
 }
 
@@ -108,7 +113,6 @@ module.exports = {
 
   async execute(interaction) {
     if (!await requireOfficialGuild(interaction)) return;
-
     if (!await requireLeagueAdmin(interaction)) return;
 
     const action = interaction.options.getSubcommand();
@@ -119,7 +123,33 @@ module.exports = {
         const targetStatus = interaction.options.getString('state') === 'open';
         const currentStatus = await database.getTransferWindowState();
         if (currentStatus === targetStatus) {
-          await updateTransferWindowEmbed(interaction.client, targetStatus);
+          await logValidationFailure(interaction, {
+            title: 'Transfer Window Status Unchanged',
+            command: 'transfer-window',
+            details: [
+              { label: 'Action', value: '`status`' },
+              { label: 'Status', value: targetStatus ? '`Open`' : '`Closed`' },
+            ],
+            terminalDetails: [
+              { label: 'Action', value: 'status' },
+              { label: 'Status', value: targetStatus ? 'Open' : 'Closed' },
+            ],
+            result: `The transfer window was already ${targetStatus ? 'open' : 'closed'}; no change was made.`,
+          });
+          const statusEmbedUpdated = await updateTransferWindowEmbed(interaction.client, targetStatus);
+          if (!statusEmbedUpdated) {
+            await logCommandResult(interaction, {
+              type: 'error',
+              title: 'Transfer Window Status Announcement Failed',
+              command: 'transfer-window',
+              details: [
+                { label: 'Action', value: '`status`', terminalValue: 'status' },
+                { label: 'Status', value: targetStatus ? '`Open`' : '`Closed`', terminalValue: targetStatus ? 'Open' : 'Closed' },
+              ],
+              result: 'The transfer window status was unchanged, but its Discord status announcement could not be updated.',
+              terminalResult: 'Transfer window status was unchanged, but the status announcement failed.',
+            });
+          }
           return interaction.editReply({
             content: targetStatus
               ? '🔓 The transfer window is already **OPEN**. No changes made.'
@@ -129,7 +159,30 @@ module.exports = {
         }
 
         await database.setTransferWindowState(targetStatus);
-        await updateTransferWindowEmbed(interaction.client, targetStatus);
+        await logCommandResult(interaction, {
+          command: 'transfer-window',
+          title: 'Transfer Window Status Changed',
+          details: [
+            { label: 'Action', value: '`status`', terminalValue: 'status' },
+            { label: 'Previous Status', value: currentStatus ? '`Open`' : '`Closed`', terminalValue: currentStatus ? 'Open' : 'Closed' },
+            { label: 'New Status', value: targetStatus ? '`Open`' : '`Closed`', terminalValue: targetStatus ? 'Open' : 'Closed' },
+          ],
+          result: `The transfer window was changed to ${targetStatus ? 'open' : 'closed'}.`,
+        });
+        const statusEmbedUpdated = await updateTransferWindowEmbed(interaction.client, targetStatus);
+        if (!statusEmbedUpdated) {
+          await logCommandResult(interaction, {
+            type: 'error',
+            title: 'Transfer Window Changed With Announcement Failure',
+            command: 'transfer-window',
+            details: [
+              { label: 'Action', value: '`status`', terminalValue: 'status' },
+              { label: 'New Status', value: targetStatus ? '`Open`' : '`Closed`', terminalValue: targetStatus ? 'Open' : 'Closed' },
+            ],
+            result: `The transfer window was changed to ${targetStatus ? 'open' : 'closed'}, but its Discord status announcement could not be updated.`,
+            terminalResult: 'Transfer window status changed, but its Discord announcement failed.',
+          });
+        }
         return interaction.editReply({
           content: targetStatus
             ? '🔓 The transfer window is now officially **OPEN**!'
@@ -169,6 +222,19 @@ module.exports = {
       const alreadyInList = currentList.includes(selectedTeam);
 
       if ((isAdding && alreadyInList) || (!isAdding && !alreadyInList)) {
+        await logValidationFailure(interaction, {
+          title: 'Transfer Window Team List Unchanged',
+          command: 'transfer-window',
+          details: [
+            { label: 'Action', value: `\`${action}\`` },
+            { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(selectedTeam)}**` },
+          ],
+          terminalDetails: [
+            { label: 'Action', value: action },
+            { label: 'Team', value: selectedTeam },
+          ],
+          result: `The team was ${isAdding ? 'already on' : 'not on'} the requested list; no change was made.`,
+        });
         return interaction.editReply({
           content: isAdding
             ? `ℹ️ **${builderHelpers.getFormattedTeamName(selectedTeam)}** is already on that list.`
@@ -183,13 +249,51 @@ module.exports = {
       if (action === 'undeny') await database.removeTransferWindowDeniedTeam(selectedTeam);
 
       const isOpen = await database.getTransferWindowState();
-      await updateTransferWindowEmbed(interaction.client, isOpen);
+      await logCommandResult(interaction, {
+        command: 'transfer-window',
+        title: 'Transfer Window Team Permission Changed',
+        details: [
+          { label: 'Action', value: `\`${action}\``, terminalValue: action },
+          { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(selectedTeam)}**`, terminalValue: selectedTeam },
+          { label: 'List', value: isAllowedListAction ? '`Allowed while closed`' : '`Denied from regular contracts`', terminalValue: isAllowedListAction ? 'Allowed while closed' : 'Denied from regular contracts' },
+        ],
+        result: `**${builderHelpers.getFormattedTeamName(selectedTeam)}** was ${isAdding ? 'added to' : 'removed from'} the ${isAllowedListAction ? 'allowed' : 'denied'} list.`,
+      });
+      const statusEmbedUpdated = await updateTransferWindowEmbed(interaction.client, isOpen);
+      if (!statusEmbedUpdated) {
+        await logCommandResult(interaction, {
+          type: 'error',
+          title: 'Team Permission Changed With Announcement Failure',
+          command: 'transfer-window',
+          details: [
+            { label: 'Action', value: `\`${action}\``, terminalValue: action },
+            { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(selectedTeam)}**`, terminalValue: selectedTeam },
+          ],
+          result: `The contract permission list was changed for **${builderHelpers.getFormattedTeamName(selectedTeam)}**, but the transfer-window announcement could not be updated.`,
+          terminalResult: `Transfer permission list changed for ${selectedTeam}, but the announcement failed.`,
+        });
+      }
       return interaction.editReply({
         content: `✅ **${builderHelpers.getFormattedTeamName(selectedTeam)}** was ${isAdding ? 'added to' : 'removed from'} the ${isAllowedListAction ? 'allowed' : 'denied'} list.`,
         flags: MessageFlags.Ephemeral,
       });
     } catch (error) {
-      console.error('❌ Database error in /transfer-window:', error);
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Transfer Window Update Failed',
+        command: 'transfer-window',
+        details: [
+          { label: 'Action', value: `\`${action}\``, terminalValue: action },
+          ...(selectedTeam ? [{
+            label: 'Team',
+            value: `**${builderHelpers.getFormattedTeamName(selectedTeam)}**`,
+            terminalValue: selectedTeam,
+          }] : []),
+        ],
+        result: 'The transfer window command failed due to an internal error.',
+        terminalResult: 'Transfer window command failed.',
+        error,
+      });
       return interaction.editReply({
         content: '❌ Internal database error while managing the transfer window.',
         flags: MessageFlags.Ephemeral,

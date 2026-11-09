@@ -2,6 +2,7 @@ const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { logCommandResult } = require('../utils/log-helpers');
 
 const {
   SCRIM_HOSTER_ROLE_ID,
@@ -45,11 +46,18 @@ module.exports = {
 
   async execute(interaction) {
     const userId = interaction.user.id;
-    console.log(`\n🎮 [scrim.js] Scrim announcement by ${interaction.user.tag}`);
 
     try {
-      const member = await interaction.guild.members.fetch(userId).catch(() => null);
+      const member = await interaction.guild.members.fetch(userId);
       if (!member) {
+        await logCommandResult(interaction, {
+          type: 'error',
+          title: 'Scrim Host Verification Failed',
+          command: 'scrim',
+          details: [{ label: 'User', value: `**${interaction.user.tag}** (\`${userId}\`)`, terminalValue: `${interaction.user.tag} (${userId})` }],
+          result: 'The command could not verify the scrim host’s server membership.',
+          terminalResult: 'Scrim host membership could not be verified.',
+        });
         return interaction.editReply({ content: '❌ Could not verify your membership.', flags: MessageFlags.Ephemeral });
       }
 
@@ -101,9 +109,28 @@ module.exports = {
 
       const channel = await interaction.client.channels.fetch(SCRIM_CHANNEL_ID);
       await channel.send({ content: pingString, embeds: [embed] });
+      await logCommandResult(interaction, {
+        command: 'scrim',
+        title: 'Scrim Announcement Posted',
+        details: [
+          { label: 'Host', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` },
+          { label: 'Region', value: serverRegion, terminalValue: serverRegion },
+          { label: 'Join Code Included', value: serverCode ? 'Yes' : 'No', terminalValue: serverCode ? 'Yes' : 'No' },
+          { label: 'Screenshot Included', value: sinfoImage ? 'Yes' : 'No', terminalValue: sinfoImage ? 'Yes' : 'No' },
+        ],
+        result: 'A scrim announcement was posted. The server name, join code, and attachment content are not included in this audit log.',
+      });
       await interaction.editReply({ content: '✅ Your scrim announcement has been sent! **Best of luck!**', flags: MessageFlags.Ephemeral });
     } catch (error) {
-      console.error('❌ Error in /scrim:', error);
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Scrim Announcement Failed',
+        command: 'scrim',
+        details: [{ label: 'Host', value: `**${interaction.user.tag}** (\`${userId}\`)`, terminalValue: `${interaction.user.tag} (${userId})` }],
+        result: 'The scrim announcement could not be completed. The server name, join code, and attachment content are not included in this audit log.',
+        terminalResult: 'Scrim announcement failed.',
+        error,
+      });
       cooldowns.delete(userId);
       await interaction.editReply({ content: '❌ Failed to send scrim announcement.', flags: MessageFlags.Ephemeral });
     }

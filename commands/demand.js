@@ -10,6 +10,7 @@ const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { requireOfficialGuild } = require('../utils/validations');
+const { logCommandResult } = require('../utils/log-helpers');
 
 const cooldowns = new Map();
 
@@ -126,7 +127,7 @@ module.exports = {
             const role = await builderHelpers.getTeamRole(interaction.client, playerTeam);
             const errorMessage = '❌ There was an error while forwarding this request to the inquiries team. Please reach the Staff team to proceed.';
 
-            const demandRequestsChannel = await interaction.client.channels.fetch(constants.DEMAND_REQUESTS_CHANNEL_ID).catch(() => null);
+            const demandRequestsChannel = await interaction.client.channels.fetch(constants.DEMAND_REQUESTS_CHANNEL_ID);
             if (demandRequestsChannel) {
                 const requestEmbed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
                     .setTitle('📜 Demand Request')
@@ -160,22 +161,75 @@ module.exports = {
                     embeds: [requestEmbed],
                     files: attachments,
                     components: [row]
-                }).catch(console.warn);
+                }).catch(async (error) => {
+                    await logCommandResult(interaction, {
+                        type: 'error',
+                        title: 'Demand Request Forwarding Failed',
+                        command: 'demand',
+                        details: [
+                            { label: 'Player', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` },
+                            { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(playerTeam)}**`, terminalValue: playerTeam },
+                        ],
+                        result: 'The demand request could not be forwarded to the review channel. The request reason and attachments are not included in this audit log.',
+                        terminalResult: 'Demand request forwarding failed.',
+                        error,
+                    });
+                    return null;
+                });
 
                 if (forwardSuccess) {
                     interaction.editReply({ content: `📁 Your demand request has been forwarded to the **inquiries team**. Once a decision is taken, you'll be DMed with the result. Make sure to **open your DMs** to receive it!` });
                 } else {
                     await database.clearPendingDemand(userId, playerTeam);
+                    cooldowns.delete(userId);
                     return interaction.editReply({ content: errorMessage });
                 }
             } else {
                 await database.clearPendingDemand(userId, playerTeam);
+                cooldowns.delete(userId);
+                await logCommandResult(interaction, {
+                    type: 'error',
+                    title: 'Demand Review Channel Unavailable',
+                    command: 'demand',
+                    details: [
+                        { label: 'Player', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` },
+                        { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(playerTeam)}**`, terminalValue: playerTeam },
+                    ],
+                    result: 'The demand request could not be forwarded because the review channel was unavailable. The request reason and attachments are not included in this audit log.',
+                    terminalResult: 'Demand review channel was unavailable.',
+                });
                 return interaction.editReply({ content: errorMessage });
             }
         } catch (error) {
-            console.error('❌ Error in /demand:', error);
+            const displayName = builderHelpers.getDiscordDisplayName(interaction.member, interaction.user);
+            let cleanupError;
             if (pendingDemandCreated && pendingDemandTeam) {
-                await database.clearPendingDemand(userId, pendingDemandTeam).catch(() => null);
+                try {
+                    await database.clearPendingDemand(userId, pendingDemandTeam);
+                } catch (error) {
+                    cleanupError = error;
+                }
+            }
+            await logCommandResult(interaction, {
+                type: 'error',
+                title: cleanupError ? 'Demand Processing and Cleanup Failed' : 'Demand Processing Failed',
+                command: 'demand',
+                details: [
+                    { label: 'Player', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` },
+                    ...(pendingDemandTeam ? [{
+                        label: 'Team',
+                        value: `**${builderHelpers.getFormattedTeamName(pendingDemandTeam)}**`,
+                        terminalValue: pendingDemandTeam,
+                    }] : []),
+                ],
+                result: cleanupError
+                    ? 'Demand processing failed and the pending request could not be cleaned up. Staff review is required. The request reason and attachments are not included in this audit log.'
+                    : 'Demand processing failed unexpectedly. The request reason and attachments are not included in this audit log.',
+                terminalResult: cleanupError ? 'Demand processing and cleanup both failed.' : 'Demand processing failed.',
+                error,
+            });
+            if (cleanupError) {
+                console.error('Failed to clean up pending demand after processing error:', cleanupError);
             }
             return interaction.editReply({ content: '❌ An internal error occurred while processing your request.' });
         }

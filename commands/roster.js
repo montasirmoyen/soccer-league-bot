@@ -5,6 +5,7 @@ const { requireOfficialGuild } = require('../utils/validations')
 const { buildPSLEmbed, formatGuildMemberDisplay } = require('../utils/embed-helpers');
 const { safeFetchMember } = require('../utils/discord-helpers')
 const constants = require('../config/constants');
+const { logCommandResult } = require('../utils/log-helpers');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -71,7 +72,17 @@ module.exports = {
 
       return interaction.editReply({ embeds: [rosterEmbed], flags: MessageFlags.Ephemeral });
     } catch (error) {
-      console.error(`❌ Error in /roster for ${selectedTeam}:`, error);
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Team Roster Lookup Failed',
+        command: 'roster',
+        details: [
+          { label: 'Team', value: `**${builderHelpers.getFormattedTeamName(selectedTeam)}**`, terminalValue: selectedTeam },
+        ],
+        result: 'The requested team roster could not be generated.',
+        terminalResult: `Roster lookup failed for ${selectedTeam}.`,
+        error,
+      });
       return interaction.editReply({ content: '❌ Failed to generate team roster.', flags: MessageFlags.Ephemeral });
     }
   },

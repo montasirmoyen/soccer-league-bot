@@ -46,24 +46,27 @@ async function logError(error, client = null, metadata = {}) {
   }
   console.log('-'.repeat(50));
 
-  if (!client || !constants.BOT_ISSUES_LOG_CHANNEL_ID) return;
+  if (!client || !constants.BOT_LOGS_CHANNEL_ID) return;
 
   try {
-    const errorChannel = await client.channels.fetch(constants.BOT_ISSUES_LOG_CHANNEL_ID).catch(() => null);
-    if (!errorChannel?.isTextBased?.()) return;
+    const errorChannel = await client.channels.fetch(constants.BOT_LOGS_CHANNEL_ID);
+    if (!errorChannel?.isTextBased?.()) {
+      console.error(`🔴 Error log channel ${constants.BOT_LOGS_CHANNEL_ID} is unavailable or not text-based.`);
+      return;
+    }
 
     const embed = buildPSLEmbed(client, isCritical ? constants.ERROR_COLOR : constants.WARNING_COLOR)
       .setTitle(`${severity} Error: ${context}`)
-      .setDescription(`**Message:**\n\`\`\`${normalizedError.message}\`\`\``);
+      .setDescription('An internal error occurred. Technical details are available in the bot process logs.');
 
-    if (Object.keys(metadata).length > 0) {
-      embed.addFields({ name: 'Metadata', value: `\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\`` });
-    }
-
-    if (normalizedError.stack) {
-      const truncatedStack = normalizedError.stack.substring(0, 1000);
-      embed.addFields({ name: 'Stack Trace', value: `\`\`\`js\n${truncatedStack}${truncatedStack.length >= 1000 ? '...' : ''}\n\`\`\`` });
-    }
+    const metadataFields = [
+      ['Command', metadata.command],
+      ['Action', metadata.action],
+      ['Team', metadata.teamName],
+    ]
+      .filter(([, value]) => typeof value === 'string' && value.length > 0)
+      .map(([name, value]) => ({ name, value: value.slice(0, 1024), inline: true }));
+    if (metadataFields.length) embed.addFields(metadataFields);
 
     await errorChannel.send({ embeds: [embed] });
   } catch (discordErr) {

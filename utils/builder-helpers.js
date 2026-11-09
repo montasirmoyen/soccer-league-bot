@@ -5,6 +5,7 @@ const configTimezones = require('../config/timezones')
 const configFriendlies = require('../config/friendlies')
 const configActions = require('../config/actions')
 const configDataTypes = require('../config/dataTypes')
+const configRatings = require('../config/ratings')
 const constants = require('../config/constants');
 const database = require('../db/database');
 
@@ -69,6 +70,10 @@ function getPlayerDataChoices() {
 
 function getTeamDataChoices() {
     return getChoices(configDataTypes.team, (key, data) => data.NAME);
+}
+
+function getRatingChoices() {
+    return getChoices(configRatings.ratings, (key, data) => `${data.EMOJI}`);
 }
 
 function getDiscordDisplayName(member, user) {
@@ -157,6 +162,7 @@ module.exports = {
     getActionChoices,
     getPlayerDataChoices,
     getTeamDataChoices,
+    getRatingChoices,
     getDiscordDisplayName,
     getCooldownState,
     formatCooldownDuration,

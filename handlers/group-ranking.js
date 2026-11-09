@@ -1,11 +1,11 @@
 require('dotenv').config();
 
 const { Client, GatewayIntentBits, Events, Partials } = require('discord.js');
-const axios = require('axios');
 const constants = require('../config/constants');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { logError, SystemError } = require('../utils/error-handler');
 const { syncMemberRoles, buildVerificationRoleChangePlan } = require('../utils/discord-helpers');
+const { getRobloxUserProfile, getGroupMembership, updateGroupRoleset } = require('../utils/roblox-helpers');
 
 const REQUIRED_ENV_VARS = ['PRODUCTION_BOT_TOKEN', 'ROBLOX_API_KEY'];
 for (const key of REQUIRED_ENV_VARS) {
@@ -26,70 +26,64 @@ const client = new Client({
 });
 
 const APP_CONFIG = {
-  groupId: 151319009,
+  groupId: constants.ROBLOX_GROUP_ID,
 
   discord: {
     unverifiedRole: constants.UNVERIFIED_ROLE_ID,
-    registeredRole: constants.REGISTERED_ROLE_ID,
+    communityRole: constants.COMMUNITY_ROLE_ID,
     assistantManagerRole: constants.ASSISTANT_MANAGER_ROLE_ID,
     managerRole: constants.MANAGER_ROLE_ID,
     mediaRole: constants.MEDIA_ROLE_ID,
-    refereeRole: constants.REFEREE_ROLE_ID,
+    officialRole: constants.OFFICIAL_ROLE_ID,
     moderatorRole: constants.MODERATOR_ROLE_ID,
     staffRole: constants.STAFF_ROLE_ID,
     overseerRole: constants.OVERSEER_ROLE_ID,
   },
 
   roblox: {
-    unverifiedRole: { id: '467994038', name: 'Unverified', rank: 2 },
-    registeredRole: { id: '655167005', name: 'Registered', rank: 3 },
-    teamManagementRole: { id: '466820038', name: 'Team Management', rank: 50 },
-    mediaRole: { id: '692453049', name: 'Media', rank: 100 },
-    refereeRole: { id: '468518027', name: 'Referee', rank: 150 },
-    moderatorRole: { id: '692831042', name: 'Moderator', rank: 251 },
-    staffRole: { id: '466720029', name: 'Staff', rank: 252 },
-    overseerRole: { id: '468116031', name: 'Overseer', rank: 253 }
+    unverifiedRole: { id: '467994038', name: 'Unverified' },
+    communityRole: { id: '655167005', name: 'Community' },
+    assistantManagerRole: { id: '912954001', name: 'Assistant Manager' },
+    managerRole: { id: '911296035', name: 'Manager' },
+    mediaRole: { id: '692453049', name: 'Media' },
+    officialRole: { id: '468518027', name: 'Official' },
+    moderatorRole: { id: '692831042', name: 'Moderator' },
+    staffRole: { id: '466720029', name: 'Staff' },
+    overseerRole: { id: '468116031', name: 'Overseer' }
   }
 };
 
 const KNOWN_ROBLOX_ROLES = new Map([
-  [APP_CONFIG.roblox.registeredRole.id, APP_CONFIG.roblox.registeredRole],
+  [APP_CONFIG.roblox.communityRole.id, APP_CONFIG.roblox.communityRole],
   [APP_CONFIG.roblox.unverifiedRole.id, APP_CONFIG.roblox.unverifiedRole],
+  [APP_CONFIG.roblox.assistantManagerRole.id, APP_CONFIG.roblox.assistantManagerRole],
+  [APP_CONFIG.roblox.managerRole.id, APP_CONFIG.roblox.managerRole],
   [APP_CONFIG.roblox.mediaRole.id, APP_CONFIG.roblox.mediaRole],
-  [APP_CONFIG.roblox.teamManagementRole.id, APP_CONFIG.roblox.teamManagementRole],
-  [APP_CONFIG.roblox.refereeRole.id, APP_CONFIG.roblox.refereeRole],
+  [APP_CONFIG.roblox.officialRole.id, APP_CONFIG.roblox.officialRole],
   [APP_CONFIG.roblox.moderatorRole.id, APP_CONFIG.roblox.moderatorRole],
   [APP_CONFIG.roblox.staffRole.id, APP_CONFIG.roblox.staffRole],
   [APP_CONFIG.roblox.overseerRole.id, APP_CONFIG.roblox.overseerRole]
 ]);
 
 const DISCORD_TO_ROBLOX_MAP = [
-  { roblox: APP_CONFIG.roblox.registeredRole, discord: [APP_CONFIG.discord.registeredRole] },
+  { roblox: APP_CONFIG.roblox.communityRole, discord: [APP_CONFIG.discord.communityRole] },
   { roblox: APP_CONFIG.roblox.unverifiedRole, discord: [APP_CONFIG.discord.unverifiedRole] },
-  {
-    roblox: APP_CONFIG.roblox.teamManagementRole,
-    discord: [
-      APP_CONFIG.discord.managerRole,
-      APP_CONFIG.discord.assistantManagerRole
-    ]
-  },
+  { roblox: APP_CONFIG.roblox.assistantManagerRole, discord: [APP_CONFIG.discord.assistantManagerRole] },
+  { roblox: APP_CONFIG.roblox.managerRole, discord: [APP_CONFIG.discord.managerRole] },
   { roblox: APP_CONFIG.roblox.mediaRole, discord: [APP_CONFIG.discord.mediaRole] },
-  { roblox: APP_CONFIG.roblox.refereeRole, discord: [APP_CONFIG.discord.refereeRole] },
+  { roblox: APP_CONFIG.roblox.officialRole, discord: [APP_CONFIG.discord.officialRole] },
   { roblox: APP_CONFIG.roblox.moderatorRole, discord: [APP_CONFIG.discord.moderatorRole] },
   { roblox: APP_CONFIG.roblox.staffRole, discord: [APP_CONFIG.discord.staffRole] },
   { roblox: APP_CONFIG.roblox.overseerRole, discord: [APP_CONFIG.discord.overseerRole] },
 ];
 
-const robloxHttp = axios.create({
-  timeout: 10000,
-  headers: {
-    'x-api-key': process.env.ROBLOX_API_KEY,
-    'Content-Type': 'application/json'
-  }
-});
-
 let syncQueue = [];
 let isProcessing = false;
+
+function getDiscordIdentity(member) {
+  const displayName = member?.displayName || member?.user?.username || 'Unknown user';
+  return `${displayName} (${member?.id || 'unknown ID'})`;
+}
 
 process.on('unhandledRejection', (reason) => logError(reason, null, { context: 'GLOBAL_UNHANDLED_REJECTION' }));
 process.on('uncaughtException', (error) => logError(error, null, { context: 'GLOBAL_UNCAUGHT_EXCEPTION' }));
@@ -98,11 +92,11 @@ async function ensureFullMember(member) {
   if (!member) return member;
 
   if (member.partial) {
-    console.log(`🔄 Member profile (${member.id}) is partial. Fetching full data...`);
+    console.log(`🔄 Member profile for ${getDiscordIdentity(member)} is partial. Fetching full data...`);
     try {
       return await member.fetch();
     } catch (error) {
-      console.error(`❌ [FETCH ERROR] It wasn't possible fetching the member ${member.id}:`, error.message);
+      console.error(`❌ [FETCH ERROR] It wasn't possible fetching ${getDiscordIdentity(member)}:`, error.message);
       return member;
     }
   }
@@ -149,9 +143,9 @@ function calculateDesiredRobloxRoles(discordRoleIds) {
   return desiredRoles;
 }
 
-function enqueueSync(newMember, desiredRoles) {
+function enqueueSync(newMember) {
   syncQueue = syncQueue.filter(({ newMember: queuedMember }) => queuedMember.id !== newMember.id);
-  syncQueue.push({ newMember, desiredRoles });
+  syncQueue.push({ newMember });
 }
 
 async function sendSyncSkippedLog(client, newMember, reason, robloxData = null) {
@@ -161,72 +155,26 @@ async function sendSyncSkippedLog(client, newMember, reason, robloxData = null) 
 
   const skipEmbed = buildPSLEmbed(client, constants.WARNING_COLOR)
     .setTitle('Sync Skipped')
-    .setDescription(`${newMember.user.tag} skipped Roblox synchronization.`)
+    .setDescription(`**${newMember.displayName || newMember.user.username}** (\`${newMember.id}\`) skipped Roblox synchronization.`)
     .addFields({ name: 'Reason', value: reason }, { name: 'Details', value: details });
 
   await sendLog(client, skipEmbed);
 }
 
-async function getRobloxUserProfile(robloxUsername) {
-  const response = await robloxHttp.post('https://users.roblox.com/v1/usernames/users', {
-    usernames: [robloxUsername]
-  });
-
-  return response.data.data[0] || null;
-}
-
-async function getGroupMembership(robloxUserId) {
-  const url = `https://apis.roblox.com/cloud/v2/groups/${APP_CONFIG.groupId}/memberships`;
-
-  const response = await robloxHttp.get(url, {
-    params: { filter: `user=='users/${robloxUserId}'` }
-  });
-
-  const memberships = response.data.groupMemberships;
-  return memberships?.[0] || null;
-}
-
-async function updateGroupRoleset(membershipPath, targetRoleId, action) {
-  const allowedActions = ['assignRole', 'unassignRole'];
-  if (!allowedActions.includes(action)) {
-    throw new Error(`Invalid action. Must be one of: ${allowedActions.join(', ')}`);
-  }
-
-  const url = `https://apis.roblox.com/cloud/v2/${membershipPath}:${action}`;
-
-  try {
-    const response = await robloxHttp.post(url, {
-      role: `groups/${APP_CONFIG.groupId}/roles/${targetRoleId}`
-    });
-
-    return { success: true, data: response.data };
-  } catch (error) {
-    const status = error.response?.status;
-    const message = error.response?.data?.message?.toLowerCase() || '';
-
-    if (action === 'assignRole' && (status === 409 || message.includes('already'))) {
-      return { success: true, alreadyOwned: true };
-    }
-    if (action === 'unassignRole' && (status === 404 || message.includes('not found'))) {
-      return { success: true, notAssigned: true };
-    }
-
-    throw error;
-  }
-}
-
-async function processSingleSync(client, newMember, desiredRoles) {
+async function processSingleSync(client, newMember) {
   if (!newMember?.guild || !newMember.user) {
     console.warn('[group-ranking.js] Refusing malformed sync queue item.');
     return;
   }
 
   try {
+    newMember = await newMember.guild.members.fetch({ user: newMember.id, force: true });
+    const desiredRoles = calculateDesiredRobloxRoles([...newMember.roles.cache.keys()]);
     const memberGuildDisplayName = newMember.displayName;
     const robloxData = await withRetry(() => getRobloxUserProfile(memberGuildDisplayName));
 
     if (!robloxData?.id) {
-      console.warn(`[group-ranking.js] No linked Roblox account found for Discord user ${newMember.user.tag}`);
+      console.warn(`[group-ranking.js] No linked Roblox account found for Discord user ${getDiscordIdentity(newMember)}`);
       await sendSyncSkippedLog(client, newMember, 'Could not find a linked Roblox account.');
       return;
     }
@@ -234,9 +182,9 @@ async function processSingleSync(client, newMember, desiredRoles) {
     const robloxId = robloxData.id;
     const robloxUsername = robloxData.name;
 
-    const membership = await withRetry(() => getGroupMembership(robloxId));
+    const membership = await withRetry(() => getGroupMembership(APP_CONFIG.groupId, robloxId));
     if (!membership) {
-      console.warn(`[group-ranking.js] User ${robloxId} is not in group ${APP_CONFIG.groupId}`);
+      console.warn(`[group-ranking.js] Roblox user ${robloxUsername} (${robloxId}) is not in group ${APP_CONFIG.groupId}`);
       await sendSyncSkippedLog(client, newMember, 'The Roblox user is not in the configured group.', robloxData);
       return;
     }
@@ -259,7 +207,7 @@ async function processSingleSync(client, newMember, desiredRoles) {
     const actionLog = [];
 
     for (const roleId of rolesToRemove) {
-      await withRetry(() => updateGroupRoleset(membership.path, roleId, 'unassignRole'));
+      await withRetry(() => updateGroupRoleset(APP_CONFIG.groupId, membership.path, roleId, 'unassignRole'));
       const roleData = KNOWN_ROBLOX_ROLES.get(roleId);
       actionLog.push(`🧹 **Removed:** \`${roleData.name}\``);
       changesMade = true;
@@ -267,7 +215,7 @@ async function processSingleSync(client, newMember, desiredRoles) {
     }
 
     for (const roleId of rolesToAdd) {
-      await withRetry(() => updateGroupRoleset(membership.path, roleId, 'assignRole'));
+      await withRetry(() => updateGroupRoleset(APP_CONFIG.groupId, membership.path, roleId, 'assignRole'));
       const roleData = KNOWN_ROBLOX_ROLES.get(roleId);
       actionLog.push(`✅ **Added:** \`${roleData.name}\``);
       changesMade = true;
@@ -275,22 +223,18 @@ async function processSingleSync(client, newMember, desiredRoles) {
     }
 
     if (!changesMade) {
-      console.log('[group-ranking.js] 🛑 Member already is with the correct synced roles. Nothing was done.');
+      console.log(`[group-ranking.js] 🛑 Roblox roles already match the latest Discord roles for ${getDiscordIdentity(newMember)}. Nothing was changed.`);
       return;
     }
 
-    console.log(`[group-ranking.js] ✅ Successfully synced Roblox roles (v2) for ${newMember.user.tag}`);
+    console.log(`[group-ranking.js] ✅ Successfully synced Roblox roles (v2) for ${getDiscordIdentity(newMember)}`);
 
     const successEmbed = buildPSLEmbed(client, constants.SUCCESS_COLOR)
       .setTitle('✅ Roblox Roles Synced')
       .setThumbnail(newMember.user.displayAvatarURL())
       .addFields(
-        { name: '👤 Discord User', value: `**${newMember.user.username}**`, inline: true },
-        { name: '🆔 Discord ID', value: `\`${newMember.id}\``, inline: true },
-        { name: '\u200B', value: '\u200B', inline: true },
-        { name: '🎮 Roblox Name', value: `[${robloxUsername}](https://www.roblox.com/users/${robloxId}/profile)`, inline: true },
-        { name: '🆔 Roblox ID', value: `\`${robloxId}\``, inline: true },
-        { name: '\u200B', value: '\u200B', inline: true },
+        { name: '👤 Discord User', value: `**${newMember.user.tag}** (\`${newMember.id}\`)`, inline: false },
+        { name: '🎮 Roblox User', value: `**[${robloxUsername}](https://www.roblox.com/users/${robloxId}/profile)** (\`${robloxId}\`)`, inline: false },
         { name: '🔑 Sync Details', value: actionLog.join('\n'), inline: false }
       );
 
@@ -316,8 +260,8 @@ async function processQueue(client) {
 
   try {
     while (syncQueue.length > 0) {
-      const { newMember, desiredRoles } = syncQueue.shift();
-      await processSingleSync(client, newMember, desiredRoles);
+      const { newMember } = syncQueue.shift();
+      await processSingleSync(client, newMember);
       await new Promise((res) => setTimeout(res, 3000));
     }
   } finally {
@@ -345,26 +289,26 @@ function registerGroupRankingHandler(client) {
       const currentRoleIds = [...newMember.roles.cache.keys()];
       const previousRoleIds = oldMember.partial ? [] : [...oldMember.roles.cache.keys()];
 
-      const currentHasReg = currentRoleIds.includes(APP_CONFIG.discord.registeredRole);
+      const currentHasReg = currentRoleIds.includes(APP_CONFIG.discord.communityRole);
       const currentHasUnv = currentRoleIds.includes(APP_CONFIG.discord.unverifiedRole);
 
       if (currentHasReg && currentHasUnv) {
-        console.warn(`[group-ranking.js] Refusing ambiguous verification roles for ${newMember.user.tag}`);
+        console.warn(`[group-ranking.js] Refusing ambiguous verification roles for ${getDiscordIdentity(newMember)}`);
         return;
       }
 
-      const verificationTargetId = currentHasReg ? APP_CONFIG.roblox.registeredRole.id
+      const verificationTargetId = currentHasReg ? APP_CONFIG.roblox.communityRole.id
         : currentHasUnv ? APP_CONFIG.roblox.unverifiedRole.id
           : null;
 
       const prevVerificationTargetId = oldMember.partial ? null
-        : previousRoleIds.includes(APP_CONFIG.discord.registeredRole) ? APP_CONFIG.roblox.registeredRole.id
+        : previousRoleIds.includes(APP_CONFIG.discord.communityRole) ? APP_CONFIG.roblox.communityRole.id
           : previousRoleIds.includes(APP_CONFIG.discord.unverifiedRole) ? APP_CONFIG.roblox.unverifiedRole.id
             : null;
 
       if (verificationTargetId !== prevVerificationTargetId) {
         const plan = buildVerificationRoleChangePlan(currentRoleIds, verificationTargetId, {
-          registeredRoleId: APP_CONFIG.discord.registeredRole,
+          communityRoleId: APP_CONFIG.discord.communityRole,
           unverifiedRoleId: APP_CONFIG.discord.unverifiedRole,
         });
         await syncMemberRoles(newMember, plan);
@@ -380,8 +324,18 @@ function registerGroupRankingHandler(client) {
 
       if (!robloxStateChanged) return;
 
-      console.log(`[group-ranking.js] 📝 Queuing Open Cloud API v2 sync for ${newMember.user.tag}`);
-      enqueueSync(newMember, currentDesiredRoles);
+      const addedRoleNames = currentDesiredRoles
+        .filter(role => !previousDesiredRoles.some(previousRole => previousRole.id === role.id))
+        .map(role => role.name);
+      const removedRoleNames = previousDesiredRoles
+        .filter(role => !currentDesiredRoles.some(currentRole => currentRole.id === role.id))
+        .map(role => role.name);
+
+      console.log(
+        `[group-ranking.js] 📝 Queuing Open Cloud API v2 sync for ${getDiscordIdentity(newMember)}` +
+        ` (Roblox roles added: ${addedRoleNames.join(', ') || 'none'}; removed: ${removedRoleNames.join(', ') || 'none'})`
+      );
+      enqueueSync(newMember);
 
       processQueue(client).catch((error) =>
         logError(error, client, { context: 'ROBLOX_SYNC_QUEUE_ERROR' })

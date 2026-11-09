@@ -1,12 +1,14 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js')
 const { buildPSLEmbed } = require('../utils/embed-helpers');
-const { 
+const {
     getFormattedTeamName,
     getDisplayedPlayerContractsAmount,
     getDisplayedPlayerDemandsAmount,
     getTeamRole } = require('../utils/builder-helpers');
+const actions = require('../config/actions').actions;
 const constants = require('../config/constants');
 const database = require('../db/database');
+const { logCommandResult } = require('../utils/log-helpers');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -22,6 +24,7 @@ module.exports = {
     async execute(interaction) {
         const targetMember = interaction.options.getMember('player');
         if (targetMember.user.bot) {
+            console.log(`⚠️ [VALIDATION] /view-profile target ${targetMember.user.tag} (${targetMember.id}) is a bot; command terminated.`);
             return interaction.editReply({ content: '❌ You cannot view a bot\'s profile.', flags: MessageFlags.Ephemeral });
         }
 
@@ -40,16 +43,32 @@ module.exports = {
             const formattedTeamName = await getFormattedTeamName(teamName);
             const displayedContractsCount = await getDisplayedPlayerContractsAmount(userId);
             const displayedDemandsCount = await getDisplayedPlayerDemandsAmount(userId);
+            const activeRestrictions = await database.getPlayerRestrictedActions(userId);
 
             profileEmbed.addFields({ name: 'Player Name', value: `**${displayName}** (${userTag})`, inline: false });
             profileEmbed.addFields({ name: 'Current Team', value: `**${formattedTeamName}**`, inline: false });
             profileEmbed.addFields({ name: 'Individual Contracts', value: `**${displayedContractsCount}**`, inline: true });
             profileEmbed.addFields({ name: 'Demands', value: `**${displayedDemandsCount}**`, inline: true });
-            
+
+            const activeRestrictionsField = activeRestrictions.length > 0
+                ? activeRestrictions.map(activeRestriction => `**${actions[activeRestriction].NAME}**`).join('\n')
+                : '🏴 **None**';
+
+            profileEmbed.addFields({ name: 'Active Restrictions', value: activeRestrictionsField, inline: false });
+
+
             return interaction.editReply({ embeds: [profileEmbed], flags: MessageFlags.Ephemeral });
 
         } catch (error) {
-            console.error(`Error fetching player profile: ${error}`);
+            await logCommandResult(interaction, {
+                type: 'error',
+                title: 'Player Profile Lookup Failed',
+                command: 'view-profile',
+                details: [{ label: 'Target', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` }],
+                result: 'The player profile could not be retrieved.',
+                terminalResult: 'Player profile lookup failed.',
+                error,
+            });
             return interaction.editReply({ content: '❌ Error fetching player profile.', flags: MessageFlags.Ephemeral });
         }
     }

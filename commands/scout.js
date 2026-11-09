@@ -3,6 +3,7 @@ const database = require('../db/database');
 const constants = require('../config/constants');
 const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
+const { logCommandResult } = require('../utils/log-helpers');
 
 const cooldowns = new Map();
 
@@ -30,10 +31,10 @@ module.exports = {
     const displayName = builderHelpers.getDiscordDisplayName(interaction.member, user);
     const userId = user.id;
     const position = interaction.options.getString('position');
-    const message = interaction.options.getString('message');
+    let staffRecord;
 
     try {
-      const staffRecord = await database.isUserStaffAnywhere(userId);
+      staffRecord = await database.isUserStaffAnywhere(userId);
       if (!staffRecord) {
         return interaction.editReply({ content: '❌ You are not an authorized manager.', flags: MessageFlags.Ephemeral });
       }
@@ -54,6 +55,7 @@ module.exports = {
 
       const role = await builderHelpers.getTeamRole(interaction.client, staffRecord.name);
       const formattedTeamName = builderHelpers.getFormattedTeamName(staffRecord.name);
+      const message = interaction.options.getString('message');
       const embed = buildPSLEmbed(interaction.client, role?.color || constants.DEFAULT_EMBED_COLOR)
         .setTitle('🔍 Player Scout')
         .setDescription(
@@ -67,12 +69,50 @@ module.exports = {
       const targetChannel = await interaction.client.channels.fetch(constants.SCOUT_CHANNEL_ID);
       if (targetChannel) {
         await targetChannel.send({ content: `<@${userId}>`, embeds: [embed] });
+        await logCommandResult(interaction, {
+          command: 'scout',
+          title: 'Team Scouting Announcement Posted',
+          details: [
+            { label: 'Manager', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` },
+            { label: 'Team', value: `**${formattedTeamName}**`, terminalValue: staffRecord.name },
+            { label: 'Position', value: position, terminalValue: position },
+          ],
+          result: 'The team scouting announcement was posted. The manager-provided message is not included in this audit log.',
+        });
         await interaction.editReply({ content: '✅ Your scouting message has been posted!', flags: MessageFlags.Ephemeral });
       } else {
+        await logCommandResult(interaction, {
+          type: 'error',
+          title: 'Scouting Channel Unavailable',
+          command: 'scout',
+          details: [
+            { label: 'Manager', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` },
+            { label: 'Team', value: `**${formattedTeamName}**`, terminalValue: staffRecord.name },
+            { label: 'Position', value: position, terminalValue: position },
+          ],
+          result: 'The scouting channel could not be found; no announcement was posted.',
+          terminalResult: 'Scouting channel was unavailable.',
+        });
         await interaction.editReply({ content: '⚠️ Could not find the scouting channel.', flags: MessageFlags.Ephemeral });
       }
     } catch (error) {
-      console.error('❌ Error in /scout:', error);
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Scouting Announcement Failed',
+        command: 'scout',
+        details: [
+          { label: 'Manager', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` },
+          ...(staffRecord ? [{
+            label: 'Team',
+            value: `**${builderHelpers.getFormattedTeamName(staffRecord.name)}**`,
+            terminalValue: staffRecord.name,
+          }] : []),
+          { label: 'Position', value: position, terminalValue: position },
+        ],
+        result: 'The scouting announcement failed unexpectedly. The user-provided message is not included in this audit log.',
+        terminalResult: 'Scouting announcement failed.',
+        error,
+      });
       return interaction.editReply({ content: '❌ An error occurred while posting your scout.', flags: MessageFlags.Ephemeral });
     }
   },

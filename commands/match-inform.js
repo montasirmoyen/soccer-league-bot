@@ -4,6 +4,7 @@ const builderHelpers = require('../utils/builder-helpers');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { isRefereeOrAdmin, requireOfficialGuild } = require('../utils/validations');
 const constants = require('../config/constants');
+const { logCommandResult, logValidationFailure } = require('../utils/log-helpers');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -37,6 +38,13 @@ module.exports = {
     const refereeMessage = interaction.options.getString('referee-message') || 'N/A';
 
     if (team1 === team2) {
+      await logValidationFailure(interaction, {
+        title: 'Match Notification Rejected',
+        command: 'match-inform',
+        details: [{ label: 'Team', value: `**${builderHelpers.getFormattedTeamName(team1)}**` }],
+        terminalDetails: [{ label: 'Team', value: team1 }],
+        result: 'Both selected teams were the same; no match notifications were sent.',
+      });
       return interaction.editReply({ content: '❌ Both teams cannot be the same.', flags: MessageFlags.Ephemeral });
     }
 
@@ -44,10 +52,21 @@ module.exports = {
     const team2Players = await database.getPlayersByTeam(team2);
 
     if (team1Players.length + team2Players.length === 0) {
+      await logValidationFailure(interaction, {
+        title: 'Match Notification Rejected',
+        command: 'match-inform',
+        details: [
+          { label: 'Team 1', value: `**${builderHelpers.getFormattedTeamName(team1)}**` },
+          { label: 'Team 2', value: `**${builderHelpers.getFormattedTeamName(team2)}**` },
+        ],
+        terminalDetails: [
+          { label: 'Team 1', value: team1 },
+          { label: 'Team 2', value: team2 },
+        ],
+        result: 'Neither team has registered players; no match notifications were sent.',
+      });
       return interaction.editReply({ content: '❌ Both teams have no registered players.', flags: MessageFlags.Ephemeral });
     }
-
-    console.log(`\n⚽ [match-inform.js] Match inform triggered by ${interaction.user.tag}: ${team1} vs ${team2}`);
 
     try {
       const [teamInfo1, teamInfo2, squad1, squad2] = await Promise.all([
@@ -111,6 +130,7 @@ module.exports = {
 
       let sent = 0;
       let failed = 0;
+      const deliveryFailures = new Map();
 
       for (const userId of recipientIds) {
         try {
@@ -119,18 +139,56 @@ module.exports = {
           sent++;
 
           await sleep(250);
-        } catch {
+        } catch (error) {
           failed++;
+          const failureType = error?.code
+            ? `Discord error ${error.code}`
+            : error?.status
+              ? `HTTP ${error.status}`
+              : error?.name || 'Unknown error';
+          deliveryFailures.set(failureType, (deliveryFailures.get(failureType) || 0) + 1);
         }
       }
 
+      await logCommandResult(interaction, {
+        type: failed ? 'error' : 'success',
+        title: failed ? 'Match Notifications Partially Delivered' : 'Match Notifications Delivered',
+        command: 'match-inform',
+        details: [
+          { label: 'Team 1', value: `**${formattedTeam1}**`, terminalValue: team1 },
+          { label: 'Team 2', value: `**${formattedTeam2}**`, terminalValue: team2 },
+          { label: 'Recipients', value: String(recipientIds.size), terminalValue: String(recipientIds.size) },
+          { label: 'Delivered', value: String(sent), terminalValue: String(sent) },
+          { label: 'Failed', value: String(failed), terminalValue: String(failed) },
+          ...(failed ? [{
+            label: 'Failure Reasons',
+            value: [...deliveryFailures].map(([reason, count]) => `${reason}: ${count}`).join('\n'),
+            terminalValue: [...deliveryFailures].map(([reason, count]) => `${reason}: ${count}`).join('; '),
+          }] : []),
+        ],
+        result: failed
+          ? `Match notifications were delivered to ${sent} of ${recipientIds.size} participants; ${failed} delivery attempt(s) failed. Referee notes are not included in this audit log.`
+          : `Match notifications were delivered to all ${sent} participants. Referee notes are not included in this audit log.`,
+        terminalResult: `Match notifications: ${sent} delivered, ${failed} failed.`,
+      });
       return interaction.editReply({
         content: `✅ Done! **${sent}** delivered, **${failed}** failed (likely closed DMs).`,
         flags: MessageFlags.Ephemeral
       });
 
     } catch (error) {
-      console.error('❌ Error in /match-inform:', error);
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Match Notification Failed',
+        command: 'match-inform',
+        details: [
+          { label: 'Team 1', value: `**${builderHelpers.getFormattedTeamName(team1)}**`, terminalValue: team1 },
+          { label: 'Team 2', value: `**${builderHelpers.getFormattedTeamName(team2)}**`, terminalValue: team2 },
+        ],
+        result: 'The match notification command failed unexpectedly. Referee notes are not included in this audit log.',
+        terminalResult: 'Match notification command failed.',
+        error,
+      });
       return interaction.editReply({ content: '❌ An error occurred while sending match info.', flags: MessageFlags.Ephemeral });
     }
   },

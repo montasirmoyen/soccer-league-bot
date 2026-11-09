@@ -3,6 +3,7 @@ const constants = require('../config/constants');
 const { buildPSLEmbed } = require('../utils/embed-helpers');
 const { safeFetchMember, safeRoleAdd } = require('../utils/discord-helpers');
 const { logError } = require('../utils/error-handler');
+const { logCommandResult } = require('../utils/log-helpers');
 const { getTransferWindowContractState } = require('../utils/transfer-window-permissions');
 
 const CONTRACT_BUTTON_ACTIONS = new Set([
@@ -81,15 +82,19 @@ function createContractAcceptanceHandler(dependencies) {
   }
 
   async function postContractToChannel(client, guild, contractEmbed, teamManager, teamAssistant) {
-    const contractsChannel = await client.channels.fetch(constants.CONTRACTS_CHANNEL_ID).catch(() => null);
-    if (!contractsChannel?.isTextBased?.()) return;
+    const contractsChannel = await client.channels.fetch(constants.CONTRACTS_CHANNEL_ID).catch((error) => {
+      console.warn(`[contract-acceptance] Could not fetch contracts channel: ${error.message}`);
+      return null;
+    });
+    if (!contractsChannel?.isTextBased?.()) return false;
 
     const mentions = await buildStaffMentions(guild, teamManager, teamAssistant);
     await contractsChannel.send({ content: mentions, embeds: [contractEmbed] });
+    return true;
   }
 
   async function notifyOfferingStaff(client, issuerId, playerId, teamName, accepted, isEmergency) {
-    if (!issuerId) return;
+    if (!issuerId) return false;
 
     try {
       const issuer = await client.users.fetch(issuerId);
@@ -108,11 +113,14 @@ function createContractAcceptanceHandler(dependencies) {
 
       try {
         await issuer.send({ embeds: [responseEmbed] });
+        return true;
       } catch (dmError) {
         console.warn(`[contract-acceptance] Could not send offer response to issuer: ${dmError.message}`);
+        return false;
       }
     } catch (dmError) {
       console.warn(`[contract-acceptance] Could not send offer response to issuer: ${dmError.message}`);
+      return false;
     }
   }
 
@@ -138,6 +146,9 @@ function createContractAcceptanceHandler(dependencies) {
 
   async function processAcceptance(interaction, client, teamName, userId, issuerId, isEmergency) {
     const formattedTeamName = `**${builderHelpers.getFormattedTeamName(teamName)}**`;
+    const playerDisplayName = interaction.member?.displayName
+      || interaction.user.displayName
+      || interaction.user.username;
 
     const failWithEmbed = async (title, description) => {
       await interaction.editReply({
@@ -205,19 +216,52 @@ function createContractAcceptanceHandler(dependencies) {
         updatedTeamInfo = await database.incrementEmergencyContract(teamName);
       }
 
-      await safeRoleAdd(targetMember, teamInfo.roleId);
+      const offeringStaff = issuerId
+        ? await client.users.fetch(issuerId).catch(() => null)
+        : null;
+      const offeringStaffDisplayName = offeringStaff?.globalName || offeringStaff?.username || 'Unknown user';
+
+      await logCommandResult(interaction, {
+        command: 'contract-response',
+        commandLabel: 'Contract response buttons',
+        title: isEmergency ? 'Emergency Contract Accepted' : 'Contract Accepted',
+        details: [
+          { label: 'Player', value: `**${targetMember.displayName}** (\`${userId}\`)`, terminalValue: `${targetMember.displayName} (${userId})` },
+          { label: 'Team', value: formattedTeamName, terminalValue: teamName },
+          { label: 'Offer Issuer', value: `**${offeringStaffDisplayName}** (\`${issuerId}\`)`, terminalValue: `${offeringStaffDisplayName} (${issuerId})` },
+          { label: 'Contract Type', value: isEmergency ? 'Emergency' : 'Regular', terminalValue: isEmergency ? 'Emergency' : 'Regular' },
+        ],
+        result: `The player accepted the ${isEmergency ? 'emergency ' : ''}contract offer and was registered with **${builderHelpers.getFormattedTeamName(teamName)}**.`,
+        terminalResult: `${targetMember.displayName} (${userId}) accepted a ${isEmergency ? 'emergency ' : ''}contract with ${teamName}.`,
+      });
+
+      const roleAdded = await safeRoleAdd(targetMember, teamInfo.roleId);
+      if (!roleAdded) {
+        await logCommandResult(interaction, {
+          type: 'error',
+          title: 'Contract Accepted With Role Assignment Failure',
+          command: 'contract-response',
+          commandLabel: 'Contract response buttons',
+          details: [
+            { label: 'Player', value: `**${playerDisplayName}** (\`${userId}\`)`, terminalValue: `${playerDisplayName} (${userId})` },
+            { label: 'Team', value: formattedTeamName, terminalValue: teamName },
+          ],
+          result: 'The contract was recorded, but the player’s Discord team role could not be assigned. Manual role cleanup may be required.',
+          terminalResult: `Contract recorded for ${userId} at ${teamName}, but team role assignment failed.`,
+        });
+      }
 
       const successEmbed = buildPSLEmbed(client, embedColor)
         .setTitle(isEmergency ? '🚨 Emergency Contract Accepted!' : '✅ Contract Accepted!')
         .setDescription(
           isEmergency
             ? `You have officially joined ${formattedTeamName} via an emergency contract! Good luck! 🏆`
-            : `Welcome to ${formattedTeamName}! You are now an officially registered squad member. Good luck this season! 🏆`
+            : `Welcome to ${formattedTeamName}! You are now an officially registered squad member. Good luck in this season! 🏆`
         );
 
       await interaction.editReply({ embeds: [successEmbed], components: [] }).catch(console.warn);
 
-      await Promise.all([
+      const followUpResults = await Promise.all([
         (async () => {
           try {
             const { manager, assistant } = await fetchTeamStaff(teamName);
@@ -258,27 +302,59 @@ function createContractAcceptanceHandler(dependencies) {
             }
 
             contractEmbed.addFields(contractFields);
-            await postContractToChannel(client, guild, contractEmbed, manager, assistant);
+            return await postContractToChannel(client, guild, contractEmbed, manager, assistant);
           } catch (err) {
             await logError(err, client, { userId, teamName, action: 'POST_CONTRACT_TO_CHANNEL' });
+            return false;
           }
         })(),
         (async () => {
           try {
-            await notifyOfferingStaff(client, issuerId, userId, teamName, true, isEmergency);
+            return await notifyOfferingStaff(client, issuerId, userId, teamName, true, isEmergency);
           } catch (err) {
             await logError(err, client, { userId, teamName, action: 'NOTIFY_OFFERING_STAFF' });
+            return false;
           }
         })(),
         (async () => {
           try {
             await updateTeamsRoster(client);
+            return true;
           } catch (err) {
             await logError(err, client, { userId, teamName, action: 'UPDATE_TEAMS_ROSTER' });
+            return false;
           }
         })(),
-      ]).catch(() => {});
+      ]);
+      if (followUpResults.some(result => !result)) {
+        await logCommandResult(interaction, {
+          type: 'error',
+          title: 'Contract Accepted With Follow-Up Issues',
+          command: 'contract-response',
+          commandLabel: 'Contract response buttons',
+          details: [
+            { label: 'Player', value: `**${playerDisplayName}** (\`${userId}\`)`, terminalValue: `${playerDisplayName} (${userId})` },
+            { label: 'Team', value: formattedTeamName, terminalValue: teamName },
+          ],
+          result: 'The contract was recorded, but one or more staff notifications, contract announcements, or roster updates failed.',
+          terminalResult: `Contract recorded for ${userId} at ${teamName}, but a follow-up operation failed.`,
+        });
+      }
     } catch (error) {
+      await logCommandResult(interaction, {
+        type: 'error',
+        title: 'Contract Acceptance Failed',
+        command: 'contract-response',
+        commandLabel: 'Contract response buttons',
+        details: [
+          { label: 'Player', value: `**${playerDisplayName}** (\`${userId}\`)`, terminalValue: `${playerDisplayName} (${userId})` },
+          { label: 'Team', value: formattedTeamName, terminalValue: teamName },
+          { label: 'Contract Type', value: isEmergency ? 'Emergency' : 'Regular', terminalValue: isEmergency ? 'Emergency' : 'Regular' },
+        ],
+        result: 'The contract acceptance failed unexpectedly. The contract state may have partially changed; verify it before retrying.',
+        terminalResult: `Contract acceptance failed for ${userId} at ${teamName}; verify resulting state before retrying.`,
+        error,
+      });
       await logError(error, client, {
         userId,
         teamName,

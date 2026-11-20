@@ -6,10 +6,13 @@ const { logCommandResult } = require('../utils/log-helpers');
 
 const cooldowns = new Map();
 
+const MAX_SUMMARY_LENGTH = 100;
+const MAX_NATIONALITY_LENGTH = 9;
+
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('send-profile')
-    .setDescription('Send your player profile to the market')
+    .setName('send-information')
+    .setDescription('Send your profile information to the market')
     .addStringOption((option) =>
       option
         .setName('position')
@@ -29,14 +32,14 @@ module.exports = {
         .setName('nationality')
         .setDescription('Your country flag emoji only (e.g. 🇦🇴)')
         .setRequired(true)
-        .setMaxLength(9)
+        .setMaxLength(MAX_NATIONALITY_LENGTH)
     )
     .addStringOption((option) =>
       option
         .setName('summary')
         .setDescription('A brief summary about you (Max. 100 characters)')
         .setRequired(true)
-        .setMaxLength(100)
+        .setMaxLength(MAX_SUMMARY_LENGTH)
     ),
 
   async execute(interaction) {
@@ -63,8 +66,8 @@ module.exports = {
       cooldowns.set(userId, now);
       setTimeout(() => cooldowns.delete(userId), cooldownAmount);
 
-      const profileEmbed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
-        .setTitle('📝 Player Profile Registered')
+      const informationEmbed = buildPSLEmbed(interaction.client, constants.DEFAULT_EMBED_COLOR)
+        .setTitle('📝 Player Information Registered')
         .setThumbnail(user.displayAvatarURL({ dynamic: true }))
         .setDescription(`⚽ **${displayName}** is now looking forward for new experiences!\n\nManagers can offer a contract using \`/contract\` or \`/emergency-contract\``)
         .addFields(
@@ -78,10 +81,10 @@ module.exports = {
       if (!playerInformationChannel) {
         await logCommandResult(interaction, {
           type: 'error',
-          title: 'Player Profile Could Not Be Posted',
-          command: 'send-profile',
+          title: 'Player Information Could Not Be Posted',
+          command: 'send-information',
           details: [{ label: 'Player', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` }],
-          result: 'The player information channel could not be found; no profile was posted.',
+          result: 'The player information channel could not be found; no information was posted.',
           terminalResult: 'Player information channel was unavailable.',
         });
         return interaction.editReply({
@@ -89,24 +92,24 @@ module.exports = {
         });
       }
 
-      await playerInformationChannel.send({ content: `<@${userId}>`, embeds: [profileEmbed] });
+      await playerInformationChannel.send({ content: `<@${userId}>`, embeds: [informationEmbed] });
       
       await interaction.editReply({
-        content: '✅ Your player profile has been posted successfully!'
+        content: '✅ Your player information has been posted successfully!'
       });
 
     } catch (error) {
       await logCommandResult(interaction, {
         type: 'error',
-        title: 'Player Profile Posting Failed',
-        command: 'send-profile',
+        title: 'Player Information Posting Failed',
+        command: 'send-information',
         details: [{ label: 'Player', value: `**${displayName}** (\`${userId}\`)`, terminalValue: `${displayName} (${userId})` }],
-        result: 'The player profile could not be posted. User-provided profile text is not included in this audit log.',
-        terminalResult: 'Player profile posting failed.',
+        result: 'The player information could not be posted. User-provided information is not included in this audit log.',
+        terminalResult: 'Player information posting failed.',
         error,
       });
       return interaction.editReply({ 
-        content: '❌ An error occurred while processing your profile registration.' 
+        content: '❌ An error occurred while processing your information registration.' 
       });
     }
   }

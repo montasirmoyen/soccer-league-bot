@@ -3,24 +3,15 @@ const constants = require('../config/constants');
 
 function buildPSLEmbed(client, color = constants.DEFAULT_EMBED_COLOR) {
   const avatarURL = client.user.displayAvatarURL();
-  
-  const detailedDate = new Date().toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true
-  });
 
   return new EmbedBuilder()
     .setColor(color)
     .setThumbnail(avatarURL)
-    .setFooter({ 
-      text: `Promoted by PSL Management System • ${detailedDate}`, 
-      iconURL: avatarURL 
-    });
+    .setFooter({
+      text: `Promoted by PSL Management System`,
+      iconURL: avatarURL
+    })
+    .setTimestamp();
 }
 
 async function getGuildMemberDisplayName(guild, userId, fallback = 'Unknown User') {

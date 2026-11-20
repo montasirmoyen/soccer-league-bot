@@ -47,8 +47,8 @@ const APP_CONFIG = {
     managerRole: { id: '911296035', name: 'Manager' },
     mediaRole: { id: '692453049', name: 'Media' },
     officialRole: { id: '468518027', name: 'Official' },
-    moderatorRole: { id: '692831042', name: 'Moderator' },
-    staffRole: { id: '466720029', name: 'Staff' },
+    moderatorRole: { id: '692831042', name: 'Staff' },
+    staffRole: { id: '466720029', name: 'PS Staff' },
     overseerRole: { id: '468116031', name: 'Overseer' }
   }
 };

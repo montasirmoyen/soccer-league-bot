@@ -1,116 +1,117 @@
 const database = require('../db/database');
 const constants = require('../config/constants');
 const configLeagues = require('../config/leagues');
-const configTeams = require('../config/teams');
 const builderHelpers = require('./builder-helpers');
 const { buildPSLEmbed, formatGuildMemberDisplay } = require('./embed-helpers');
 const { safeFetchMember } = require('./discord-helpers');
+
+const VACANT_LABEL = '*Vacant*';
+
+function normalizeDiscordId(userId) {
+  return userId ? String(userId).replace(/\D/g, '') : null;
+}
+
+function getStaffIds(teams) {
+  return [
+    ...new Set(
+      teams.flatMap((team) => [team.manager, team.assistantManager])
+        .map(normalizeDiscordId)
+        .filter(Boolean)
+    )
+  ];
+}
+
+async function fetchStaffMembers(guild, teams) {
+  if (!guild) return null;
+
+  const staffIds = getStaffIds(teams);
+  return staffIds.length > 0
+    ? safeFetchMember(guild, staffIds)
+    : new Map();
+}
+
+async function resolveDisplayName(guild, memberCollection, userId) {
+  if (!userId) return VACANT_LABEL;
+
+  const cleanId = normalizeDiscordId(userId);
+  const cachedMember = memberCollection?.get(cleanId);
+  if (cachedMember?.displayName) return cachedMember.displayName;
+
+  return formatGuildMemberDisplay(guild, userId);
+}
+
+async function buildTeamField(guild, memberCollection, team) {
+  const [manager, assistant, teamCapacity] = await Promise.all([
+    resolveDisplayName(guild, memberCollection, team.manager),
+    resolveDisplayName(guild, memberCollection, team.assistantManager),
+    builderHelpers.getDisplayedPlayersAmount(team.name)
+  ]);
+
+  return {
+    name: builderHelpers.getFormattedTeamName(team.name),
+    value: `\`[${teamCapacity}]\`\n**M.:** ${manager}\n**A.M.:** ${assistant}\n\u200b`,
+    inline: false
+  };
+}
+
+async function buildTeamFields(guild, memberCollection, teams) {
+  return Promise.all(
+    teams.map((team) => buildTeamField(guild, memberCollection, team))
+  );
+}
+
+function buildLeagueEmbeds(client, fields) {
+  return Object.entries(configLeagues.leagues)
+    .filter(([, leagueData]) => Boolean(leagueData))
+    .map(([leagueName, leagueData]) => {
+      const embed = buildPSLEmbed(
+        client,
+        leagueData.COLOR || constants.DEFAULT_EMBED_COLOR
+      ).setTitle(builderHelpers.getFormattedLeagueName(leagueName).trim());
+
+      return fields.length > 0 ? embed.addFields(fields) : embed;
+    });
+}
+
+async function publishTeamRoster(channel, client, embeds) {
+  if (embeds.length === 0) return;
+
+  const messages = await channel.messages.fetch({ limit: 20 });
+  const existingRosterMessage = messages.find(
+    (message) => message.author.id === client.user.id && message.embeds.length > 0
+  );
+
+  const payload = { content: '# ⚽ PSL S4 Teams', embeds };
+  const rosterMessage = existingRosterMessage
+    ? await existingRosterMessage.edit(payload)
+    : await channel.send(payload);
+
+  const jumpText = `[Come back to the top](${rosterMessage.url})`;
+  const existingShortcutMessage = messages.find(
+    (message) => message.author.id === client.user.id
+      && message.content.includes('Come back to the top')
+  );
+
+  if (!existingShortcutMessage) {
+    await channel.send({ content: jumpText });
+  }
+}
 
 async function updateTeamsRoster(client) {
   try {
     const channel = await client.channels.fetch(constants.TEAMS_CHANNEL_ID).catch(() => null);
     if (!channel) return;
 
-    const allTeams = await database.getAllTeams();
-    if (!allTeams?.length) return;
+    const teams = await database.getAllTeams();
+    if (!teams?.length) return;
 
-    allTeams.sort((a, b) => a.name.localeCompare(b.name));
-
+    const sortedTeams = [...teams].sort((a, b) => a.name.localeCompare(b.name));
     const guild = channel.guild;
-    let memberCollection = null;
+    const memberCollection = await fetchStaffMembers(guild, sortedTeams);
+    const fields = await buildTeamFields(guild, memberCollection, sortedTeams);
+    const embeds = buildLeagueEmbeds(client, fields);
 
-    if (guild) {
-      const allStaffIds = [];
-      for (const team of allTeams) {
-        if (team.manager) allStaffIds.push(team.manager);
-        if (team.assistantManager) allStaffIds.push(team.assistantManager);
-      }
-      if (allStaffIds.length > 0) {
-        memberCollection = await safeFetchMember(guild, allStaffIds);
-      }
-    }
-
-    const resolveDisplayName = async (userId) => {
-      if (!userId) return '*Vacant*';
-
-      const cleanId = String(userId).replace(/\D/g, '');
-      const cachedMember = memberCollection?.get(cleanId);
-      if (cachedMember?.displayName) return `${cachedMember.displayName}`;
-
-      return formatGuildMemberDisplay(guild, userId);
-    };
-
-    const embeds = [];
-    for (const [leagueName, leagueData] of Object.entries(configLeagues.leagues)) {
-      if (!leagueData || !Array.isArray(leagueData.teams)) continue;
-
-      const embedColor = leagueData.COLOR || constants.DEFAULT_EMBED_COLOR;
-      
-      const titleString = `${builderHelpers.getFormattedLeagueName(leagueName)}`.trim();
-
-      const embed = buildPSLEmbed(client, embedColor)
-        .setTitle(titleString);
-
-      const fields = [];
-
-      for (const teamName of leagueData.teams) {
-        const team = allTeams.find((t) => t.name === teamName);
-        if (!team) continue; 
-
-        const staticTeamConfig = configTeams?.teams?.[teamName];
-        const teamEmoji = staticTeamConfig?.EMOJI_ID ? `${staticTeamConfig.EMOJI_ID} ` : '';
-
-        const label = `${builderHelpers.getFormattedTeamName(team.name)}`;
-        
-        const managerId = team.manager ? String(team.manager).replace(/\D/g, '') : null;
-        const assistantManagerId = team.assistantManager ? String(team.assistantManager).replace(/\D/g, '') : null;
-
-        const manager = team.manager ? await resolveDisplayName(managerId) : '*Vacant*';
-        const assistant = team.assistantManager ? await resolveDisplayName(assistantManagerId) : '*Vacant*';
-        const teamCapacity = await builderHelpers.getDisplayedPlayersAmount(team.name);
-
-        fields.push({
-          name: `${label}`,
-          value: `\`[${teamCapacity}]\`\n**M.:** ${manager}\n**A.M.:** ${assistant}\n\u200b`,
-          inline: false
-        });
-      }
-
-      if (fields.length > 0) {
-        embed.addFields(fields);
-      }
-      
-      embeds.push(embed);
-    }
-
-    if (embeds.length > 0) {
-      const messages = await channel.messages.fetch({ limit: 20 });
-      
-      let existingEmbedsMsg = messages.find(
-        (msg) => msg.author.id === client.user.id && msg.embeds.length > 0
-      );
-
-      let finalEmbedsMsg;
-
-      const messagePayload = { content: '# ⚽ PSL S3 Teams', embeds: embeds };
-      if (existingEmbedsMsg) {
-        finalEmbedsMsg = await existingEmbedsMsg.edit(messagePayload);
-      } else {
-        finalEmbedsMsg = await channel.send(messagePayload);
-      }
-
-      const topMessageLink = finalEmbedsMsg.url;
-      const jumpText = `[Come back to the top](${topMessageLink})`;
-
-      const existingShortcutMsg = messages.find(
-        (msg) => msg.author.id === client.user.id && msg.content.includes('Come back to the top')
-      );
-
-      if (!existingShortcutMsg || !finalEmbedsMsg) {
-        await channel.send({ content: jumpText });
-      }
-    }
-
+    await publishTeamRoster(channel, client, embeds);
   } catch (error) {
     console.error(`[roster-updater.js] Unexpected error: ${error}`);
   }
